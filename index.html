@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>五笔86 打字练习</title>
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+
+<header class="hdr">
+  <h1>五笔86 打字练习</h1>
+  <nav class="tabs" id="tabs">
+    <button class="tab" data-mode="story" aria-selected="true">故事</button>
+    <button class="tab" data-mode="words">常用词语</button>
+    <button class="tab" data-mode="wrong">错字本</button>
+    <button class="tab" data-mode="heat">6500 字覆盖</button>
+  </nav>
+  <span class="spacer"></span>
+  <span class="status" id="storage-status"></span>
+  <button class="iconbtn" id="btn-theme" title="切换亮/暗">亮色</button>
+  <button class="iconbtn" id="btn-export" title="把练习进度存成 JSON 文件">导出</button>
+  <button class="iconbtn" id="btn-import" title="从 JSON 文件恢复进度">导入</button>
+  <input type="file" id="file-import" accept=".json,application/json" hidden>
+  <button class="iconbtn" id="btn-selftest" title="打开自检页">自检</button>
+</header>
+
+<main>
+  <!-- 故事模式 -->
+  <section class="panel active" id="panel-story">
+    <div id="story-picker">
+      <div class="storytitle">选一篇开始</div>
+      <div class="storymeta">内置短文全部经校验：100% 落在 6500 常用字集内，每个字都有五笔码。</div>
+      <div class="list" id="story-list"></div>
+      <div class="importwrap">
+        <div class="storytitle" style="font-size:15px">粘贴自己的文本</div>
+        <div class="storymeta">超纲字会标灰，照样能打；标点自动跳过。</div>
+        <textarea id="custom-text" placeholder="在这里粘贴任何中文文本，然后点「开始练」…"></textarea>
+        <div class="row">
+          <button class="iconbtn" id="btn-custom-start">开始练</button>
+          <span class="hintnote" id="custom-check"></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="story-run" hidden>
+      <div class="row" style="margin:0 0 4px">
+        <button class="iconbtn" id="btn-back">← 换一篇</button>
+        <button class="iconbtn" id="btn-restart">重练本篇</button>
+      </div>
+      <div class="storytitle" id="run-title"></div>
+      <div class="storymeta" id="run-meta"></div>
+      <div class="text" id="run-text"></div>
+      <div class="row" id="run-done" hidden>
+        <span class="hintnote" id="run-done-note"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 常用词语 -->
+  <section class="panel" id="panel-words">
+    <div class="storytitle">常用词语</div>
+    <div class="storymeta" id="words-meta"></div>
+    <div class="row">
+      <button class="iconbtn" data-sort="weight">按词频</button>
+      <button class="iconbtn" data-sort="random">随机</button>
+      <button class="iconbtn" data-sort="len2">只练二字词</button>
+      <button class="iconbtn" id="btn-words-next">换一组</button>
+      <span class="hintnote" id="words-note"></span>
+    </div>
+    <div class="wordlist" id="words-list"></div>
+    <div class="row"><span class="hintnote">练词组码：一次上屏整个词。打不出的词可以点「跳过」。</span>
+      <button class="iconbtn" id="btn-words-skip">跳过当前词</button>
+    </div>
+    <div class="text" id="words-text" style="font-size:22px;margin-top:14px"></div>
+  </section>
+
+  <!-- 错字本 -->
+  <section class="panel" id="panel-wrong">
+    <div class="storytitle">错字本</div>
+    <div class="storymeta" id="wrong-meta"></div>
+    <div class="row">
+      <button class="iconbtn" id="btn-wrong-start">开始重练</button>
+      <button class="iconbtn" id="btn-wrong-clear">清空错字本</button>
+    </div>
+    <div class="list" id="wrong-list"></div>
+    <div class="text" id="wrong-text" style="font-size:23px;margin-top:14px"></div>
+  </section>
+
+  <!-- 热力图 -->
+  <section class="panel" id="panel-heat">
+    <div class="storytitle">6500 字覆盖</div>
+    <div class="storymeta" id="heat-meta"></div>
+    <div class="legend">
+      <span><i style="background:var(--bg-key)"></i>没练过</span>
+      <span><i style="background:color-mix(in srgb, var(--done) 85%, var(--bg-key))"></i>练熟 ≥3 次</span>
+      <span><i style="background:color-mix(in srgb, var(--accent) 55%, var(--bg-key))"></i>练过 1–2 次</span>
+      <span><i style="background:color-mix(in srgb, var(--warn) 55%, var(--bg-key))"></i>错过</span>
+    </div>
+    <div class="heat" id="heat-grid"></div>
+    <div class="text" id="heat-text" style="font-size:23px;margin-top:14px"></div>
+  </section>
+</main>
+
+<!-- 左下停靠区：输入条 + 迷你键盘（点击原地放大为字根表） -->
+<aside class="dock" id="dock">
+  <div class="ime" id="ime">
+    <div class="ime-top">
+      <span class="ime-buf" id="ime-buf"></span>
+      <span class="ime-tip" id="ime-tip"></span>
+    </div>
+    <div class="cands" id="ime-cands"></div>
+  </div>
+  <div class="keys" id="keys">
+    <div id="keys-mini"></div>
+    <div id="keys-root" hidden></div>
+    <div class="kbdhint" id="keys-hint">点键盘 -> 字根表</div>
+  </div>
+</aside>
+
+<div class="stats" id="stats">
+  <div><span class="v" id="st-cpm">0</span>字/分</div>
+  <div><span class="v" id="st-acc">—</span>正确率</div>
+  <div><span class="v" id="st-first">—</span>首次正确</div>
+  <div><span class="v bad" id="st-wrong">0</span>判错</div>
+  <div><span class="v" id="st-hint">0</span>提示</div>
+  <div><span class="v" id="st-prog">0%</span>进度</div>
+</div>
+
+<div class="mask" id="mask">
+  <div class="card">
+    <h2 id="mask-title">点击这里开始</h2>
+    <p id="mask-desc">在英文输入法下敲字母，就是敲五笔编码。</p>
+    <p><kbd>空格</kbd> 选第一个候选 · <kbd>1</kbd>–<kbd>9</kbd> 选第 N 个 · <kbd>-</kbd> <kbd>=</kbd> 翻页</p>
+    <p><kbd>Tab</kbd> 长按 0.35 秒 = 提示缺哪几个字母 · <kbd>退格</kbd> 删码/撤销 · <kbd>Esc</kbd> 清空 · 点左下键盘切字根表</p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="data/wubi86.js"></script>
+<script src="data/rootmap.js"></script>
+<script src="data/stories.js"></script>
+<script src="src/wubi-core.js"></script>
+<script src="src/stats.js"></script>
+<script src="src/app.js"></script>
+<script>
+// 浏览器自检：index.html?selftest=1
+// 结果写进 #selftest-out 并把 document.title 设为 SELFTEST PASS / FAIL n，
+// 所以 headless 浏览器也能验：chrome --headless --dump-dom "file:///.../index.html?selftest=1"
+if (location.search.indexOf("selftest") >= 0) {
+  var st = document.createElement("script");
+  st.src = "src/selftest.js";
+  document.body.appendChild(st);
+}
+</script>
+</body>
+</html>

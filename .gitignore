@@ -1,0 +1,14 @@
+# tools/raw/ 是源代码表的下载缓存（2.4 MB），build_data.py 会自动重新下载，
+# 而且其中的字表转录仓库没有附许可，不适合再分发 —— 所以不入库。
+tools/raw/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 临时产物
+*.tmp
+*.log

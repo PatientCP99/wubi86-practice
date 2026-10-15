@@ -1,0 +1,13 @@
+# 默认：仓库内存 LF，检出时按平台自动
+* text=auto eol=lf
+
+# 关键：tools/browser_check.cmd 必须是 CRLF。
+# cmd.exe 无法正确解析 LF 换行的批处理（实测会报 "'st' is not recognized..."），
+# 少了这条，别人 clone 下来双击就跑不起来。
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# 生成物：给 diff 加个标记，避免 GitHub 把它当普通源码统计
+data/wubi86.js linguist-generated=true
+
+*.png binary
