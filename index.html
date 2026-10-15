@@ -18,6 +18,8 @@
   </nav>
   <span class="spacer"></span>
   <span class="status" id="storage-status"></span>
+  <button class="iconbtn toggle" id="btn-beginner" aria-pressed="true"
+          title="入门模式：显示每个字的五笔编码，并给出当前字的字根拆解">入门模式</button>
   <button class="iconbtn" id="btn-theme" title="切换亮/暗">亮色</button>
   <button class="iconbtn" id="btn-export" title="把练习进度存成 JSON 文件">导出</button>
   <button class="iconbtn" id="btn-import" title="从 JSON 文件恢复进度">导入</button>
@@ -93,8 +95,9 @@
     <div class="storymeta" id="heat-meta"></div>
     <div class="legend">
       <span><i style="background:var(--bg-key)"></i>没练过</span>
-      <span><i style="background:color-mix(in srgb, var(--done) 85%, var(--bg-key))"></i>练熟 ≥3 次</span>
-      <span><i style="background:color-mix(in srgb, var(--accent) 55%, var(--bg-key))"></i>练过 1–2 次</span>
+      <span><i style="background:color-mix(in srgb, var(--done) 85%, var(--bg-key))"></i>自己打对 ≥3 次</span>
+      <span><i style="background:color-mix(in srgb, var(--accent) 55%, var(--bg-key))"></i>自己打对 1–2 次</span>
+      <span><i class="l4"></i>只在入门模式练过（不算掌握）</span>
       <span><i style="background:color-mix(in srgb, var(--warn) 55%, var(--bg-key))"></i>错过</span>
     </div>
     <div class="heat" id="heat-grid"></div>

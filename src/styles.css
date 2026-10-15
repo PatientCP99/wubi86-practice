@@ -123,6 +123,11 @@ body.dock-expanded main { padding-bottom: 450px; }
   letter-spacing: 0.02em;
   word-break: break-word;
 }
+/* 入门模式：每个字上方多了编码行，此时把行距收紧 ——
+   原来 1.95 的行距本来就留了大量空隙，编码行正好塞进去，
+   正文总高度基本不变（实测 51px/行 -> 约 50px/行），而不是撑高 67%。 */
+body.beginner .text { line-height: 1.32; }
+body.beginner .text p { margin: 0 0 0.85em; }
 .text p { margin: 0 0 0.7em; }
 .text .ch {
   position: relative;
@@ -130,6 +135,77 @@ body.dock-expanded main { padding-bottom: 450px; }
   padding: 1px 0.5px;
   transition: background-color 0.12s, color 0.12s;
 }
+/* 入门模式才把字变成纵向两行的块（编码 + 字身）；普通模式保持纯 inline，布局与从前一致 */
+body.beginner .text .ch { display: inline-block; text-align: center; }
+/* 入门模式：字上方多一行编码 */
+body.beginner .text .ch .zi { display: block; }
+body.beginner .text .ch .code {
+  display: block;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  letter-spacing: 0.5px;
+  font-style: normal;
+  color: var(--fg-dim);
+  white-space: nowrap;
+}
+.text .ch.done .code { color: var(--done-fg); opacity: 0.75; }
+.text .ch.current .code { color: var(--accent); font-weight: 700; }
+.text .ch.outofset .code { color: var(--warn-fg); }
+
+/* 当前字的字根拆解浮注：绝对定位，不占布局，所以正文只涨编码那一行 */
+.text .ch .roots {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  margin-top: 3px;
+  padding: 3px 9px;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  white-space: nowrap;
+  font-style: normal;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg);
+  background: var(--bg-soft);
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
+}
+.text .ch .roots .rp { display: inline-flex; gap: 4px; align-items: baseline; }
+.text .ch .roots .rp b { font-family: Consolas, monospace; font-size: 13px; color: var(--accent); }
+/* 尾码区分（入门模式 + 本地精确拆解数据时才会出现 rk-id / rk-stroke / rk-pad） */
+.text .ch .roots .rk-id { color: var(--warn-fg); }
+.text .ch .roots .rk-id b { color: var(--warn-fg); }
+.text .ch .roots .rk-stroke,
+.text .ch .roots .rk-pad,
+.text .ch .roots .rk-full { color: var(--fg-dim); }
+.text .ch .roots .rk-full b { color: var(--fg-dim); font-size: 12px; }
+.text .ch .roots .zigen { font-family: "ZiGen", serif; font-size: 17px; }
+
+/* 可整打提示：贴在光标处那个词的首字上方 */
+.text .ch .wordtag {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  margin-bottom: 2px;
+  padding: 1px 7px;
+  font-style: normal;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-soft));
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+}
+.text .ch.insider { box-shadow: inset 0 -2px 0 var(--accent); }
 .text .ch.done { color: var(--done-fg); }
 .text .ch.punct { color: var(--fg-faint); }
 .text .ch.current {
@@ -418,20 +494,80 @@ body.dock-expanded main { padding-bottom: 450px; }
 .heat span.l0 { background: color-mix(in srgb, var(--warn) 55%, var(--bg-key)); color: var(--fg); }
 .heat span.l1 { background: color-mix(in srgb, var(--done) 85%, var(--bg-key)); color: #fff; }
 .heat span.l2 { background: color-mix(in srgb, var(--accent) 55%, var(--bg-key)); color: #fff; }
+/* 只在入门模式练过：斜纹 + 淡色，明确"这不算掌握" */
+.heat span.l4 {
+  color: var(--fg-dim);
+  background:
+    repeating-linear-gradient(45deg,
+      color-mix(in srgb, var(--fg-faint) 30%, transparent) 0 4px,
+      transparent 4px 8px),
+    var(--bg-key);
+}
+.legend i.l4 {
+  background:
+    repeating-linear-gradient(45deg,
+      color-mix(in srgb, var(--fg-faint) 30%, transparent) 0 4px,
+      transparent 4px 8px),
+    var(--bg-key);
+}
+/* 顶部开关 */
+.iconbtn.toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.ime-tip .cd { font-family: Consolas, monospace; color: var(--fg); letter-spacing: 1px; }
 .legend { font-size: 12px; color: var(--fg-dim); margin-top: 10px; display: flex; gap: 14px; flex-wrap: wrap; }
 .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
 
-.wordlist { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+/* 词语参考表：一行一个词 —— 词组码 + 逐字(码 / 字 / 字根拆解) */
+.wordlist { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; }
 .wordlist .w {
-  padding: 9px 13px;
-  font-size: 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 7px 13px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 10px;
   background: var(--bg-soft);
 }
 .wordlist .w.cur { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-.wordlist .w.ok { background: color-mix(in srgb, var(--done) 45%, var(--bg-soft)); }
-.wordlist .w.no { background: color-mix(in srgb, var(--warn) 45%, var(--bg-soft)); }
+.wordlist .w.ok { background: color-mix(in srgb, var(--done) 30%, var(--bg-soft)); }
+.wordlist .wcode {
+  font-family: Consolas, monospace;
+  font-size: 16px;
+  letter-spacing: 1px;
+  color: var(--accent);
+  min-width: 5.5ch;
+  flex: none;
+}
+.wordlist .cc {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+  min-width: 0;
+}
+.wordlist .cccode { font-family: Consolas, monospace; font-size: 11px; line-height: 1.3; color: var(--fg-dim); font-style: normal; }
+.wordlist .cczi { font-size: 22px; line-height: 1.2; font-weight: 400; }
+.wordlist .ccroots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fg-dim);
+  font-style: normal;
+  max-width: 460px;
+}
+.wordlist .ccroots .rp { display: inline-flex; gap: 3px; align-items: baseline; }
+.wordlist .ccroots .rp b { font-family: Consolas, monospace; font-size: 12px; color: var(--accent); }
+.wordlist .ccroots .rk-id { color: var(--warn-fg); }
+.wordlist .ccroots .rk-id b { color: var(--warn-fg); }
+.wordlist .ccroots .rk-stroke,
+.wordlist .ccroots .rk-pad { color: var(--fg-faint); }
 
 @media (max-width: 1180px) {
   .root .rroots { font-size: 13px; }

@@ -195,7 +195,14 @@
     eq(chips.length, 10, "一组 10 个词");
     ok(document.querySelectorAll("#words-text .ch").length > 0, "词语模式有自己的正文容器（不是隐藏的故事面板）");
     eq(chips[0].classList.contains("cur"), true, "第一个词标为当前");
-    ok(/[a-y]{2,4}/.test(document.querySelector("#words-list .w .n").textContent), "词块显示了词组码（纯字母）");
+    ok(/[a-y]{2,4}/.test(document.querySelector("#words-list .w .wcode").textContent), "词块显示词组码（纯字母）");
+    ok(document.querySelectorAll("#words-list .w .cc").length >= 2, "词块逐字展开（每字一张小卡）");
+    ok(
+      /[a-y]{1,4}/.test(document.querySelector("#words-list .w .cc .cccode").textContent),
+      "每个字给出自己的最短码"
+    );
+    const ccr = document.querySelector("#words-list .w .cc .ccroots");
+    ok(ccr && ccr.textContent.length > 5, "入门模式下逐字给出字根拆解", ccr && ccr.textContent.slice(0, 24));
     const skipBefore = app.app.session.cursor;
     document.getElementById("btn-words-skip").click();
     ok(app.app.session.cursor > skipBefore, "「跳过当前词」推进光标", app.app.session.cursor);
@@ -209,7 +216,7 @@
     ok(document.getElementById("panel-heat").classList.contains("active"), "切到热力图");
     const cells = document.querySelectorAll("#heat-grid span");
     eq(cells.length, 6500, "热力图渲染 6500 个字格");
-    ok(/已练 \d+ \/ 6500/.test(document.getElementById("heat-meta").textContent), "热力图覆盖率摘要");
+    ok(/自己打对过 \d+ \/ 6500/.test(document.getElementById("heat-meta").textContent), "热力图覆盖率摘要");
     cells[100].click();
     ok(document.querySelectorAll("#heat-text .ch").length >= 30, "点热力图格子 -> 进入字表练习");
 
@@ -220,12 +227,80 @@
     eq(app.app.tries, 1, "自动上屏 都 计入一次尝试");
     eq(app.app.firstTry, 1, "没错过 -> 计入首次正确");
 
-    // 存储
+    // ---------------------------------------------------------- 入门模式
+    group("入门模式（编码行 + 当前字字根拆解）");
+    const begBtn = document.getElementById("btn-beginner");
+    ok(begBtn && begBtn.getAttribute("aria-pressed") === "true", "首次访问：入门模式默认开");
+
+    app.startSession("工地在", "自检-入门", null, 0);
+    const cells2 = document.querySelectorAll("#run-text .ch");
+    eq(cells2.length, 3, "正文渲染 3 个字");
+    eq(document.querySelectorAll("#run-text .ch .code").length, 3, "每个字上方都生成了一行编码");
+    eq(cells2[0].querySelector(".code").textContent, "a", "工 的编码行 = 最短合法码 a");
+    eq(cells2[1].querySelector(".code").textContent, "f", "地 的编码行 = f（一级简码）");
+    eq(cells2[2].querySelector(".code").textContent, "d", "在 的编码行 = d（一级简码）");
+    const rootsEl = cells2[0].querySelector(".roots");
+    ok(!!rootsEl, "当前字有字根拆解浮注");
+    ok(/^A/.test(rootsEl.textContent.replace(/\s+/g, "")), "浮注以键位 A 开头", rootsEl.textContent);
+    ok(/工/.test(rootsEl.textContent) && /七/.test(rootsEl.textContent), "浮注列出了 A 键的字根集合（默认层）");
+    ok(/全码/.test(document.getElementById("ime-tip").textContent), "输入条额外给出全码");
+
+    // 可整打提示
+    app.startSession("我们的", "自检-词码", null, 0);
+    const tag = document.querySelector("#run-text .ch .wordtag");
+    ok(!!tag, "光标处的可整打词有标签");
+    ok(/trwu/.test(tag ? tag.textContent : ""), "标签给出词组码 trwu", tag && tag.textContent);
+    ok(document.querySelectorAll("#run-text .ch.insider").length === 2, "词的两个字被标为可整打范围");
+
+    // 行距/总高回归：入门模式多了一行编码，但不能把正文撑得太高
+    const longText = STORIES[0].paragraphs.join("\n");
+    // 用 .zi（字身）量，不能用 .ch —— 标点没有编码行，顶部会差一个编码行的高度
+    function pitchOf() {
+      const tops = [];
+      for (const c of document.querySelectorAll("#run-text .ch .zi")) {
+        const t = Math.round(c.getBoundingClientRect().top);
+        if (!tops.some(function (y) { return Math.abs(y - t) < 4; })) tops.push(t);
+      }
+      tops.sort(function (a, b) { return a - b; });
+      return tops.length > 1 ? tops[1] - tops[0] : 0;
+    }
+    const heightOf = () => document.getElementById("run-text").getBoundingClientRect().height;
+    app.startSession(longText, "自检-行距", null, 0);
+    const pitchBeginner = pitchOf();
+    const hBeginner = Math.round(heightOf());
+    app.setBeginner(false, false);
+    const pitchNormal = pitchOf();
+    const hNormal = Math.round(heightOf());
+    app.setBeginner(true, false);
+    results.push("  ..    正文行距：入门模式 " + pitchBeginner + "px / 关闭时 " + pitchNormal + "px");
+    results.push("  ..    整段总高：入门模式 " + hBeginner + "px / 关闭时 " + hNormal + "px（×" + (hBeginner / hNormal).toFixed(2) + "）");
+    ok(pitchNormal > 20 && pitchBeginner > 20, "能量到行距", pitchBeginner + "/" + pitchNormal);
+    ok(pitchBeginner <= pitchNormal * 1.35, "入门模式行距不超过关闭时的 1.35 倍", pitchBeginner + " vs " + pitchNormal);
+    ok(hBeginner <= hNormal * 1.35, "整段总高膨胀不超过 35%", hBeginner + " vs " + hNormal);
+
+    // 判错保留缓冲（入门模式）
+    app.startSession("雨", "自检-缓冲", null, 0);
+    key("f"); key("g");
+    ok(app.app.session.buffer === "fg", "敲 fg 后缓冲 = fg");
+    key(" "); // 太早按空格 -> 上屏 二 -> 判错
+    eq(app.app.session.buffer, "fg", "入门模式判错后保留已敲的码");
+
+    // 关掉开关
+    begBtn.click();
+    ok(app.app.beginner === false, "点开关 -> 关掉入门模式");
+    ok(window.WubiStats.getPref("beginner") === false, "选择被写进偏好（下次打开记得住）");
+    eq(document.querySelectorAll("#run-text .ch .code").length, 0, "关掉后编码行消失");
+    ok(!document.querySelector("#run-text .ch .roots"), "关掉后拆解浮注消失");
+    eq(app.app.session.keepBuffer, false, "关掉后会话不再保留缓冲");
+
+    // 存储：入门模式的上屏只计练习量、不计掌握度
     const dump = window.WubiStats.exportJSON();
     let parsed = null;
     try { parsed = JSON.parse(dump); } catch (e) {}
     ok(parsed && typeof parsed.chars === "object", "导出 JSON 可被解析且含字级数据");
-    ok(parsed && parsed.chars["工"] && parsed.chars["工"].seen >= 1, "字级统计记录了 工");
+    ok(parsed && parsed.chars["工"] && parsed.chars["工"].seenBeginner >= 1, "入门模式的上屏记进 seenBeginner");
+    ok(parsed && parsed.chars["工"] && !(parsed.chars["工"].seen > 0), "入门模式的上屏不计入 seen（掌握度）");
+    ok(parsed && parsed.totals.charsBeginner >= 1, "totals.charsBeginner 有计数");
 
     // Tab 长按（异步）
     const tabBefore = document.getElementById("ime-tip").textContent;
@@ -254,12 +329,19 @@
     document.body.appendChild(box);
   }
 
-  try {
-    if (document.readyState === "complete") run();
-    else window.addEventListener("load", run);
-  } catch (e) {
-    failed++;
-    results.push("EXCEPTION " + (e && e.stack ? e.stack : e));
-    finish();
+  // 注意: run() 里有一部分是异步的（Tab 长按那段靠 setTimeout），
+  // 所以必须把 run() 本身也包起来 —— 否则 load 回调里抛的异常没人接，
+  // 自检会静默死掉、连 SELFTEST FAIL 都不写，这比失败本身更难查。
+  function safeRun() {
+    try {
+      run();
+    } catch (e) {
+      failed++;
+      results.push("EXCEPTION  " + (e && e.stack ? e.stack : String(e)));
+      finish();
+    }
   }
+
+  if (document.readyState === "complete") safeRun();
+  else window.addEventListener("load", safeRun);
 })();

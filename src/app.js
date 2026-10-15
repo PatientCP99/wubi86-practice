@@ -18,6 +18,10 @@
   const app = {
     active: false,
     mode: "story",
+    beginner: true, // 入门模式：显示编码 + 当前字字根拆解（首次默认开，之后记住选择）
+    beginnerRendered: false,
+    rootsEl: null,
+    tagEl: null,
     session: null,
     label: "",
     started: 0, // 本段第一次按键时间戳
@@ -153,6 +157,8 @@
   }
 
   // ---------------------------------------------------------------- 正文渲染
+  // 入门模式（app.beginner）下，每个字上方多一行小字给"最短合法码"；
+  // 当前字的字根拆解用**绝对定位的浮注**画在字下方 —— 不占布局，所以正文只涨编码那一行。
   function renderText(text, containerId) {
     const container = $(containerId || "run-text");
     container.innerHTML = "";
@@ -160,6 +166,8 @@
     app.spans = [];
     app.planSpans = [];
     app.lastCurrent = -1;
+    app.rootsEl = null;
+    app.tagEl = null;
     const chars = Array.from(text);
     let span = null;
     const newPara = () => {
@@ -176,23 +184,65 @@
         app.spans.push(null);
         continue;
       }
-      const s = document.createElement("span");
-      s.className = "ch";
-      s.textContent = ch;
-      if (!Core.isHanzi(ch)) s.classList.add("punct");
-      else if (!inCharset(ch)) {
-        s.classList.add("outofset");
-        s.title = "超纲字（不在 6500 字集内）";
+      const cell = document.createElement("span");
+      cell.className = "ch";
+      if (app.beginner && Core.isHanzi(ch)) {
+        const codeEl = document.createElement("i");
+        codeEl.className = "code";
+        codeEl.textContent = idx.shortestCode(ch) || "";
+        cell.appendChild(codeEl);
       }
-      span.appendChild(s);
-      app.spans.push(s);
-      if (planOfDisplay[i] !== undefined) app.planSpans[planOfDisplay[i]] = s;
+      const zi = document.createElement("span");
+      zi.className = "zi";
+      zi.textContent = ch;
+      cell.appendChild(zi);
+      if (!Core.isHanzi(ch)) cell.classList.add("punct");
+      else if (!inCharset(ch)) {
+        cell.classList.add("outofset");
+        cell.title = "超纲字（不在 6500 字集内）";
+      }
+      span.appendChild(cell);
+      app.spans.push(cell);
+      if (planOfDisplay[i] !== undefined) app.planSpans[planOfDisplay[i]] = cell;
     }
+    app.beginnerRendered = app.beginner;
+  }
+
+  // 某个码位的拆解（默认层：键位 + 该键的字根集合）
+  // 精确层（本地增强数据存在时）会把这一格换成真实字根字形，见 decomposePart()
+  function decomposePart(key, i) {
+    const info = rootByKey[key];
+    if (!info) return { key: key.toUpperCase(), text: "（无用此键）", cls: "rk-none" };
+    return { key: key.toUpperCase(), text: info.roots.join(" "), cls: "rk-root", name: info.name };
+  }
+
+  // 逐位渲染成"键位 + 该键字根"的分组（故事浮注与词语参考表共用同一套渲染）
+  function rootGroupsHTML(code) {
+    const out = [];
+    for (let i = 0; i < code.length; i++) {
+      const p = decomposePart(code[i], i);
+      out.push('<span class="rp ' + p.cls + '"><b>' + p.key + "</b><span>" + p.text + "</span></span>");
+    }
+    return out.join("");
+  }
+
+  // 生成"当前字"的拆解浮注内容
+  function decomposeHTML(ch) {
+    const code = idx.shortestCode(ch);
+    if (!code) return "";
+    const full = idx.fullCode(ch);
+    const fullNote = full && full !== code ? '<span class="rp rk-full"><b>全码</b><span>' + full + "</span></span>" : "";
+    return rootGroupsHTML(code) + fullNote;
   }
 
   function applyStates() {
     const s = app.session;
     if (!s) return;
+    if (app.beginner !== app.beginnerRendered) {
+      // 开关变了 -> 重建正文（编码行要加/去）
+      const text = s.display.join("");
+      renderText(text, app.textEl ? app.textEl.id : "run-text");
+    }
     const states = s.displayStates();
     for (let i = 0; i < states.length; i++) {
       const el = app.spans[i];
@@ -200,6 +250,7 @@
       el.classList.remove("done", "current", "pending");
       if (states[i] !== "punct") el.classList.add(states[i]);
     }
+    markCurrent();
     const cur = s.plan[s.cursor];
     if (cur) {
       const el = app.spans[cur.displayIndex];
@@ -207,6 +258,49 @@
         scrollIntoBand(el);
         app.lastCurrent = s.cursor;
       }
+    }
+  }
+
+  // 当前字的浮注 + 可整打词标签（两者都随光标走，只保留一份）
+  function markCurrent() {
+    const s = app.session;
+    if (app.rootsEl) {
+      app.rootsEl.innerHTML = "";
+      app.rootsEl = null;
+    }
+    if (app.tagEl) {
+      app.tagEl.remove();
+      app.tagEl = null;
+    }
+    if (!s || s.isDone()) return;
+    const cur = s.plan[s.cursor];
+    if (!cur) return;
+    const el = app.spans[cur.displayIndex];
+    if (!el) return;
+    if (app.beginner) {
+      const el2 = document.createElement("i");
+      el2.className = "roots";
+      el2.innerHTML = decomposeHTML(cur.ch);
+      el.appendChild(el2);
+      app.rootsEl = el2;
+    }
+    // 可整打提示（只标光标处那一个词）
+    const w = idx.longestWord(s.plan, s.cursor, "");
+    if (app.beginner && w && w.len >= 2) {
+      const tag = document.createElement("i");
+      tag.className = "wordtag";
+      tag.textContent = "可整打 " + w.code;
+      const first = app.spans[s.plan[s.cursor].displayIndex];
+      if (first) {
+        first.appendChild(tag);
+        app.tagEl = tag;
+        for (let k = 0; k < w.len; k++) {
+          const sp = app.spans[s.plan[s.cursor + k].displayIndex];
+          if (sp) sp.classList.add("insider");
+        }
+      }
+    } else {
+      for (const sp of app.spans) if (sp) sp.classList.remove("insider");
     }
   }
 
@@ -281,13 +375,13 @@
   }
   function tipBase(ch) {
     if (!ch) return "";
-    return (
-      "目标 <b>" +
-      ch +
-      "</b>" +
-      (inCharset(ch) ? "" : "（超纲）") +
-      (idx.shortestCode(ch) ? "　最短 " + idx.shortestCode(ch).length + " 码" : "")
-    );
+    const short = idx.shortestCode(ch);
+    const full = idx.fullCode(ch);
+    let out = "目标 <b>" + ch + "</b>" + (inCharset(ch) ? "" : "（超纲）");
+    if (short) out += "　最短 " + short.length + " 码 <span class=\"cd\">" + short + "</span>";
+    // 入门模式额外给全码（让初学者知道"有简码"这件事）
+    if (app.beginner && full && full !== short) out += "　全码 <span class=\"cd\">" + full + "</span>";
+    return out;
   }
 
   function showHint() {
@@ -343,8 +437,10 @@
 
   // ---------------------------------------------------------------- 会话
   function startSession(text, label, cursorKey, resumeAt, textContainerId) {
-    app.session = Core.createSession(idx, { text: text });
+    // preserveBufferOnError: 入门模式下判错保留已敲的码（治"太早按空格"）
+    app.session = Core.createSession(idx, { text: text, preserveBufferOnError: app.beginner });
     app.label = label;
+    app.beginnerSession = app.beginner; // 本次练习以哪个模式开始（历史记录用）
     app.cursorKey = cursorKey || null;
     app.started = 0;
     app.dirty = false;
@@ -397,6 +493,7 @@
       rejects: st.rejects,
       hints: st.hintUses,
       firstTry: app.tries ? Math.round((app.firstTry / app.tries) * 100) : 100,
+      mode: app.beginnerSession ? "beginner" : "normal",
     });
     $("run-done").hidden = false;
     $("run-done-note").textContent =
@@ -439,7 +536,8 @@
       case "commit":
       case "autocommit": {
         const cur = s.plan[ev.cursorBefore];
-        St.recordCommit({ text: ev.text, correct: ev.correct, expected: ev.expected });
+        // beginner: 答案就在屏幕上，正确上屏只计练习量、不计掌握度（否则热力图会骗人）
+        St.recordCommit({ text: ev.text, correct: ev.correct, expected: ev.expected, beginner: app.beginner });
         if (ev.correct) {
           app.tries++;
           if (!app.dirty) app.firstTry++;
@@ -630,10 +728,33 @@
       const d = document.createElement("div");
       d.className = "w";
       d.dataset.i = String(i);
-      d.innerHTML = '<span class="t"></span><span class="n" style="font-size:11px;color:var(--fg-faint)"></span>';
-      d.querySelector(".t").textContent = w.text;
-      d.querySelector(".n").textContent = " " + w.code;
-      d.title = w.code;
+      d.title = w.text + " = " + w.code;
+      // 词码
+      const code = document.createElement("span");
+      code.className = "wcode";
+      code.textContent = w.code;
+      d.appendChild(code);
+      // 逐字：字 + 该字的码 + 该字的字根拆解（全显，入门模式下才有拆解）
+      for (const ch of Array.from(w.text)) {
+        const cc = document.createElement("span");
+        cc.className = "cc";
+        const c1 = document.createElement("i");
+        c1.className = "cccode";
+        c1.textContent = idx.shortestCode(ch) || "";
+        const c2 = document.createElement("b");
+        c2.className = "cczi";
+        c2.textContent = ch;
+        cc.appendChild(c1);
+        cc.appendChild(c2);
+        if (app.beginner) {
+          const c3 = document.createElement("i");
+          c3.className = "ccroots";
+          const code2 = idx.shortestCode(ch);
+          if (code2) c3.innerHTML = rootGroupsHTML(code2);
+          cc.appendChild(c3);
+        }
+        d.appendChild(cc);
+      }
       box.appendChild(d);
     });
   }
@@ -703,18 +824,23 @@
     const list = idx.charsetList;
     const cov = St.coverage(list);
     $("heat-meta").textContent =
-      "已练 " + cov.touched + " / " + cov.total + " 字（" + Math.round((cov.touched / cov.total) * 100) + "%）· 点任意字开始刷这一段";
+      "自己打对过 " + cov.touched + " / " + cov.total + " 字（" + Math.round((cov.touched / cov.total) * 100) + "%）" +
+      (cov.beginnerOnly ? " · 另有 " + cov.beginnerOnly + " 字只在入门模式练过（不算掌握）" : "") +
+      " · 点任意字开始刷这一段";
     const grid = $("heat-grid");
     grid.innerHTML = "";
     const frag = document.createDocumentFragment();
     for (const ch of list) {
       const b = document.createElement("span");
       const lv = St.charLevel(ch);
-      const cls = lv === 1 ? "l1" : lv === 2 ? "l2" : lv === 3 ? "l0" : "";
+      // 0=错过 1=练熟 2=练过 4=仅入门练过
+      const cls = lv === 1 ? "l1" : lv === 2 ? "l2" : lv === 0 ? "l0" : lv === 4 ? "l4" : "";
       if (cls) b.className = cls;
       b.textContent = ch;
       const cs = St.charStats(ch);
-      b.title = ch + "：" + (cs ? "练过 " + cs.seen + " 次，错 " + cs.wrong + " 次，提示 " + cs.hint + " 次" : "还没练过");
+      b.title = ch + "：" + (cs
+        ? "自己打对 " + (cs.seen || 0) + " 次 · 入门模式打对 " + (cs.seenBeginner || 0) + " 次 · 错 " + (cs.wrong || 0) + " 次 · 提示 " + (cs.hint || 0) + " 次"
+        : "还没练过");
       frag.appendChild(b);
     }
     grid.appendChild(frag);
@@ -767,6 +893,24 @@
   }
   $("btn-theme").addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 
+  // ---------------------------------------------------------------- 入门模式
+  // 首次默认开（软件定位是学五笔，第一次打开不能是一片光秃秃），之后记住用户的选择。
+  function setBeginner(on, persist) {
+    app.beginner = !!on;
+    $("btn-beginner").setAttribute("aria-pressed", String(app.beginner));
+    $("btn-beginner").classList.toggle("on", app.beginner);
+    document.body.classList.toggle("beginner", app.beginner); // 收紧行距用
+    // 判错保留缓冲是入门模式的行为，跟着开关走（会话上可改，不用重建）
+    if (app.session) app.session.keepBuffer = app.beginner;
+    if (persist !== false) St.setPref("beginner", app.beginner);
+    if (app.session) {
+      applyStates(); // beginnerRendered 不一致时会重建正文
+      renderIme();
+    }
+    if (app.mode === "words" && wordsGroup.length) renderWords(); // 词语参考表里的拆解跟着开关变
+  }
+  $("btn-beginner").addEventListener("click", () => setBeginner(!app.beginner, true));
+
   $("btn-export").addEventListener("click", () => {
     const blob = new Blob([St.exportJSON()], { type: "application/json" });
     const a = document.createElement("a");
@@ -816,6 +960,7 @@
     $("storage-status").innerHTML = St.storageAvailable()
       ? ""
       : "<b>进度无法保存</b>（浏览器禁用了本地存储，本次练习不落盘）";
+    setBeginner(St.getPref("beginner", true), false); // 首次访问默认开
     renderStoryList();
     renderWrong();
     setMode("story");
@@ -832,8 +977,13 @@
   //   ?mask=0          直接跳过"点击开始"遮罩
   //   ?story=lamp      直接开始某篇内置故事（用 id）
   //   ?keys=root       迷你键盘以字根表形态打开
+  //   ?beginner=0|1    强制入门模式开关的初始状态（只影响本次，不写偏好）
+  //   ?mode=words      直接进入某个模式（story/words/wrong/heat）
   function applyQuery() {
     const q = new URLSearchParams(location.search);
+    if (q.get("beginner") === "0" || q.get("beginner") === "1") {
+      setBeginner(q.get("beginner") === "1", false);
+    }
     if (q.get("mask") === "0") activate();
     const sid = q.get("story");
     if (sid) {
@@ -844,11 +994,13 @@
       }
     }
     if (q.get("keys") === "root") toggleKeys();
+    const mode = q.get("mode");
+    if (mode && ["story", "words", "wrong", "heat"].indexOf(mode) >= 0) setMode(mode);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 
   // 供 selftest.html / 调试用
-  window.WubiApp = { app: app, idx: idx, setMode: setMode, startSession: startSession };
+  window.WubiApp = { app: app, idx: idx, setMode: setMode, startSession: startSession, setBeginner: setBeginner };
 })();

@@ -13,10 +13,15 @@
       created: Date.now(),
       updated: 0,
       stories: {}, // id -> {cursor, total, done, updated}
-      chars: {}, // 字 -> {seen, wrong, hint, ms}
-      words: {}, // 词 -> {seen, wrong}
-      history: [], // 每次练习一条
-      totals: { chars: 0, ms: 0, sessions: 0, wrong: 0, hints: 0 },
+      // 注意 seen 与 seenBeginner 是两回事:
+      //   seen          = 没看答案、自己打对的次数 -> 这才是"掌握度"，热力图按它染色
+      //   seenBeginner  = 入门模式（答案就在屏幕上）照着打对的次数 -> 只算练习量
+      // 不分开的后果: 入门模式跑一遍 6500 字，热力图就全绿了，掌握度变成谎话。
+      chars: {}, // 字 -> {seen, seenBeginner, wrong, hint, ms}
+      words: {}, // 词 -> {seen, seenBeginner, wrong}
+      history: [], // 每次练习一条（带 mode）
+      prefs: {}, // 界面偏好（入门开关等）
+      totals: { chars: 0, charsBeginner: 0, ms: 0, sessions: 0, wrong: 0, hints: 0 },
     };
   }
 
@@ -51,6 +56,7 @@
       data.chars = saved.chars || {};
       data.words = saved.words || {};
       data.history = Array.isArray(saved.history) ? saved.history : [];
+      data.prefs = saved.prefs || {};
       data.totals = Object.assign(emptyData().totals, saved.totals || {});
       available = true;
     } else {
@@ -88,27 +94,31 @@
     return s ? s.cursor : 0;
   }
 
-  // 字级: 每次正确上屏记 seen; 判错记 wrong; 用提示记 hint
+  // 字级: 正确上屏记 seen（入门模式记 seenBeginner）; 判错记 wrong; 用提示记 hint
   function bumpChar(ch, field, n) {
     if (!ch) return;
-    const c = data.chars[ch] || { seen: 0, wrong: 0, hint: 0 };
+    const c = data.chars[ch] || { seen: 0, seenBeginner: 0, wrong: 0, hint: 0 };
     c[field] = (c[field] || 0) + (n === undefined ? 1 : n);
     data.chars[ch] = c;
   }
   function bumpWord(w, field) {
     if (!w || Array.from(w).length < 2) return;
-    const o = data.words[w] || { seen: 0, wrong: 0 };
+    const o = data.words[w] || { seen: 0, seenBeginner: 0, wrong: 0 };
     o[field] = (o[field] || 0) + 1;
     data.words[w] = o;
   }
 
-  // 上屏结果: {text, correct, hintUsed}
+  // 上屏结果: {text, correct, expected, beginner}
+  // beginner=true（入门模式，答案就显示在屏幕上）时正确上屏**不计入掌握度**，
+  // 只计练习量。判错照常计 —— 错就是错，错字本要能用。
   function recordCommit(res) {
     const chars = Array.from(res.text);
+    const beg = !!res.beginner;
     if (res.correct) {
-      for (const ch of chars) bumpChar(ch, "seen");
-      if (chars.length > 1) bumpWord(res.text, "seen");
-      data.totals.chars += chars.length;
+      for (const ch of chars) bumpChar(ch, beg ? "seenBeginner" : "seen");
+      if (chars.length > 1) bumpWord(res.text, beg ? "seenBeginner" : "seen");
+      if (beg) data.totals.charsBeginner += chars.length;
+      else data.totals.chars += chars.length;
     } else {
       const want = Array.from(res.expected || "");
       for (const ch of chars) bumpChar(ch, "wrong");
@@ -120,6 +130,16 @@
   function recordHint(ch) {
     if (ch) bumpChar(ch, "hint");
     data.totals.hints++;
+  }
+
+  // ------------------------------------------------------------ 界面偏好
+  function getPref(k, dflt) {
+    return data.prefs[k] === undefined ? dflt : data.prefs[k];
+  }
+  function setPref(k, v) {
+    data.prefs[k] = v;
+    save();
+    return v;
   }
 
   function addSession(rec) {
@@ -152,17 +172,29 @@
     list.sort((a, b) => b.wrong - a.wrong);
     return limit ? list.slice(0, limit) : list;
   }
-  // 热力图: 分桶 -> {0:未练, 1..4}
+  // 热力图分桶:
+  //   -1 没碰过  0 错过（优先显示，不管是在哪种模式错的）
+  //    1 练熟（自己打对 ≥3 次）  2 练过（自己打对 1-2 次）
+  //    4 只在入门模式练过（答案在屏幕上照着打的，不算掌握度）
   function charLevel(ch) {
     const c = data.chars[ch];
-    if (!c || !c.seen) return c && c.wrong ? 0 : -1; // -1 = 完全没碰过
-    if (c.wrong > 0) return 3; // 练过但错得多
-    return c.seen >= 3 ? 1 : 2;
+    if (!c) return -1;
+    if (c.wrong > 0) return 0;
+    if (c.seen >= 3) return 1;
+    if (c.seen > 0) return 2;
+    if (c.seenBeginner > 0) return 4;
+    return -1;
   }
+  // 掌握度覆盖（只看 seen，入门模式不计）
   function coverage(charsetList) {
     let touched = 0;
-    for (const ch of charsetList) if (data.chars[ch] && data.chars[ch].seen) touched++;
-    return { touched: touched, total: charsetList.length };
+    let beginnerOnly = 0;
+    for (const ch of charsetList) {
+      const c = data.chars[ch];
+      if (c && c.seen) touched++;
+      else if (c && c.seenBeginner) beginnerOnly++;
+    }
+    return { touched: touched, beginnerOnly: beginnerOnly, total: charsetList.length };
   }
   function recentHistory(n) {
     return data.history.slice(0, n || 10);
@@ -211,6 +243,8 @@
     storyCursor: storyCursor,
     recordCommit: recordCommit,
     recordHint: recordHint,
+    getPref: getPref,
+    setPref: setPref,
     addSession: addSession,
     charStats: charStats,
     charLevel: charLevel,

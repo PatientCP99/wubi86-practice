@@ -393,5 +393,52 @@ section("[15] 边界");
   eq(h.missing, "a", "mismatch 时给完整的最短码 a（让用户看到该打什么）");
 }
 
+// ---------------------------------------------------------------- 16. 入门模式
+section("[16] 入门模式：判错保留缓冲（治「太早按空格」）");
+{
+  const s = Core.createSession(idx, { text: "雨", preserveBufferOnError: true });
+  s.press("f");
+  s.press("g");
+  const ev = s.press(" ");
+  eq(ev.correct, false, "敲 fg 就空格 -> 上屏 二 -> 判错");
+  eq(s.buffer, "fg", "入门模式保留已敲的码");
+  eq(ev.bufferKept, "fg", "事件里带出保留的缓冲");
+  eq(s.cursor, 0, "光标仍然不动");
+  s.press("h");
+  s.press("y");
+  eq(s.press(" ").correct, true, "接着敲 hy -> 对上 雨 -> 判对");
+  eq(s.cursor, 1, "光标前进");
+}
+{
+  const s = Core.createSession(idx, { text: "雨" });
+  s.press("f");
+  s.press("g");
+  eq(s.press(" ").correct, false, "非入门同样判错");
+  eq(s.buffer, "", "非入门仍然清空缓冲（要重打）");
+}
+{
+  const s = Core.createSession(idx, { text: "工", preserveBufferOnError: true });
+  const ev = type(s, "trwu");
+  eq(ev.type, "autocommit", "trwu 自动上屏");
+  eq(ev.correct, false, "目标是 工 -> 判错");
+  eq(s.buffer, "", "自动上屏判错不留缓冲（码已打满，留着没意义）");
+  eq(ev.bufferKept, undefined, "该事件里没有 bufferKept");
+}
+
+// ---------------------------------------------------------------- 17. 全码/键位
+section("[17] 全码 / 键位辅助（入门模式显示用）");
+eq(idx.shortestCode("一"), "g", "一 的最短合法码 = g");
+eq(idx.fullCode("一"), "ggll", "一 的全码 = ggll（末两位 l 是补齐位）");
+eq(idx.fullCode("十"), "fgh", "十 的全码 = fgh（本来就 3 码，没有 4 码）");
+eq(idx.fullCode("雨"), "fghy", "雨 的全码 = fghy");
+{
+  const codes = idx.codesOf("𬉼");
+  ok(!!codes && codes.length > 0, "代理对字（扩展B）也能取到码");
+  eq(idx.fullCode("𬉼"), codes[codes.length - 1], "代理对字的全码 = 最长码");
+}
+eq(idx.keyAt("fghy", 0), "f", "fghy 第 0 位在 F 键");
+eq(idx.keyAt("fghy", 3), "y", "fghy 第 3 位在 Y 键");
+eq(idx.keyAt("fghy", 9), null, "越界返回 null");
+
 console.log("\n" + (failed ? "FAILED: " + failed + " 项" : "ALL PASS") + "\n");
 process.exit(failed ? 1 : 0);

@@ -118,6 +118,19 @@
         const list = charCodes.get(ch);
         return list && list.length ? list[0] : null;
       },
+      // 目标字的全部合法码（长度升序）—— "全码"就是最后一个
+      codesOf: function (ch) {
+        return charCodes.get(ch) || null;
+      },
+      // 全码 = 最长合法码（4 码优先；十=fgh 这种 3 码字，全码就是 fgh）
+      fullCode: function (ch) {
+        const list = charCodes.get(ch);
+        return list && list.length ? list[list.length - 1] : null;
+      },
+      // 某个码位落在哪个键上（入门模式显示"这一码在哪个键"用）
+      keyAt: function (code, i) {
+        return code && i < code.length ? code[i] : null;
+      },
       // 从 plan 的 cursor 起, 在词表里找最长匹配的词（可要求其码以 buffer 为前缀）
       longestWord: function (plan, cursor, buffer) {
         const chars = plan.map((p) => p.ch);
@@ -137,10 +150,14 @@
   }
 
   // ------------------------------------------------------------ 会话（状态机）
-  // opts: { text, skipPunctuation=true }
+  // opts: { text, skipPunctuation=true, preserveBufferOnError=false }
   //
-  // 注意: 引擎只有"严格"一种判定 —— 上屏内容 !== 目标切片 时判错、光标不动、缓冲清空。
+  // 注意: 引擎只有"严格"一种判定 —— 上屏内容 !== 目标切片 时判错、光标不动。
   //       要不要"标红放行"（流畅模式）由上层根据事件里的 correct 决定, 引擎不替它做。
+  //
+  // preserveBufferOnError: 判错后**保留**已敲的码（入门模式用）。初学者最常见的错法是
+  //   "太早按空格"（目标 雨=fghy，敲了 fg 就空格 -> 上屏 二 判错）；清空缓冲等于让他重敲
+  //   4 个键，保留则接着敲 hy 就能对上。非入门模式保持清空（熟练阶段要求一次打对）。
   function createSession(index, opts) {
     opts = opts || {};
     const display = Array.from(opts.text || "");
@@ -175,6 +192,9 @@
       candidates: [],
       stats: stats,
       history: [], // 正确上屏记录, 供退格撤销
+      // 判错后是否保留已敲的码（入门模式用）。做成会话上可改的属性，
+      // 这样用户中途切开关时不用重建会话、也不会丢掉正在敲的码。
+      keepBuffer: !!opts.preserveBufferOnError,
 
       // 当前页的候选（带 1-9 编号）
       pageCandidates: function () {
@@ -292,9 +312,16 @@
         ev.cursorAfter = s.cursor;
         ev.done = s.isDone();
       } else {
-        // 严格模式: 不上屏、光标不动、要重打
+        // 严格模式: 不上屏、光标不动
         stats.wrong++;
         ev.cursorAfter = s.cursor;
+        // 入门模式: 手动上屏判错时把码还回去（治"太早按空格"）。
+        // 自动上屏不算 —— 那时码已经打满, 留着没有意义。
+        if (s.keepBuffer && !auto) {
+          s.buffer = cand.code || "";
+          s.page = 0;
+          ev.bufferKept = s.buffer;
+        }
       }
       return ev;
     }
