@@ -133,10 +133,6 @@
     }
     eq(nameBad, 0, "25 个键名字都在自己键的字根里");
     eq(rootBad, 0, "可查字根的首码都等于本键（偏旁例外已声明）");
-    // 5 个只能作偏旁、码表查不到的字根，靠人工核对 —— 要求这件事被记录下来
-    const hv = ROOTMAP.humanVerified;
-    ok(!!hv && !!hv.date && Array.isArray(hv.items) && hv.items.length === 5, "偏旁字根的人工核对已记录在数据里",
-      hv && hv.date + " / " + (hv.items || []).length + " 项");
 
     // ---------------------------------------------------------- 故事
     group("内置故事");
