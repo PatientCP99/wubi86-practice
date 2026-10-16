@@ -49,26 +49,49 @@
 | 精确（可选，本地生成） | **逐个码位**给出真实字根字形，并区分「字根位 / 识别码位 / 笔画码位」 | 需跑一次 `tools/fetch_rootunits.py`（数据与字体只落本地、不入库）—— **尚未实现** |
 
 精确层的数据来自 [hantang/search-wubi](https://github.com/hantang/search-wubi)，**该仓库没有许可文件**，
-字根又是私用区码点（必须配它自带的 `黑体字根.ttf` 才显示得出来），所以那份数据与字体**不能随仓库公开**。
-默认层则永远合法可用。
+字根又是私用区(PUA)码点（必须配它自带的 `黑体字根.ttf` 才显示得出来，该字体疑似 SimHei 子集），
+所以**数据与字体都不能随仓库公开**，只落本地。默认层则永远合法可用。
 
-![入门模式·故事](docs/05-beginner-story.png)
+```bash
+python tools/fetch_rootunits.py     # 下载源数据 -> 生成 data/local/rootunits.js + zigen.ttf（约 585 KB）
+node tools/test_rootunits.js        # 校验（没生成过时自动跳过，不阻塞干净克隆）
+```
 
-![入门模式·词语参考表](docs/07-beginner-words.png)
+生成后右上角显示「精确拆解 ✓」，浮注从 `A 工戈弋艹廿廾匚七 …` 升级成 `[艹]A [八]W [巳]N │全码│ [⊙]B 识别码`。
+三个刻意的设计：
+
+- **全码余下位也一并解释**：很多字的识别码落在最短码之外（`想` 的最短码是 3 码 `shn`，
+  识别码 `u` 在第 4 位）。只讲最短码那几位，识别码就永远看不见 —— 余下位用「全码」分隔标出并压暗。
+- **识别码必须标出来**：6500 个常用字里 **2909 个（44.8%）** 的末码是末笔识别码而不是字根，
+  一律当字根显示会把 45% 的字教错。鼠标悬停能看到「末笔捺·上下型」这样的判定依据。
+- **笔画码 / 补齐位**同理：`十`=fgh 的后两位是笔画码，`一`=ggll 的 `ll` 是补齐位。
+
+三个已知边角：
+
+- 没生成过数据时，控制台会有一条 `data/local/rootunits.js` 的 404 —— 无害，界面自动退回默认层并在右上角显示状态。
+- 上游对 3 个扩展B 字（`𬉼𠳐𥻗`）没有拆解数据，这几个字自动退回默认层。
+- 上游有 1 处数据错误已按证据修正：`镕`=qpwk 的第一位源表写成 `彐` 的字形。修正依据写在
+  `tools/fetch_rootunits.py` 的 `FIXES` 里（不是放宽校验 —— 修完"字根字形跨键"仍必须为 0）。
+
+![精确拆解·故事](docs/08-precise-story.png)
+
+![精确拆解·词语参考表](docs/09-precise-words.png)
 
 ## 一键验证
 
 ```bash
 python tools/build_data.py          # 重建 data/wubi86.js + 打印/写出自检报告
-node tools/test_data.js             # 数据不变式          ALL PASS
-node tools/test_rootmap.js          # 字根表 vs 码表反验   ALL PASS
+python tools/fetch_rootunits.py     # 生成精确拆解数据（可选层）
+node tools/test_data.js             # 数据不变式            ALL PASS
+node tools/test_rootmap.js          # 字根表 vs 码表反验     ALL PASS
 node tools/test_logic.js            # 状态机行为（含入门模式）ALL PASS
-node tools/test_stories.js          # 内置故事校验         ALL PASS
+node tools/test_stories.js          # 内置故事校验           ALL PASS
+node tools/test_rootunits.js        # 精确拆解数据校验（没生成则跳过）
 tools\browser_check.cmd             # 浏览器自检（双击即可，headless Chrome/Edge）
 ```
 
 浏览器自检也可以手动看：打开 `index.html?selftest=1`（或点界面右上角「自检」）。
-它在真实浏览器里跑 **105 项**数据/逻辑/字根表/故事/界面/行距检查，全绿才写 `SELFTEST PASS`。
+它在真实浏览器里跑 **117 项**数据/逻辑/字根表/故事/界面/行距/精确拆解检查，全绿才写 `SELFTEST PASS`。
 
 ![字根表展开](docs/03-rootmap-expanded.png)
 
@@ -80,22 +103,26 @@ tools\browser_check.cmd             # 浏览器自检（双击即可，headless 
 ├─ src/
 │  ├─ wubi-core.js       纯逻辑：倒排索引 + 输入状态机（不碰 DOM，node 可跑）
 │  ├─ stats.js           localStorage 统计（字级数据 / 断点 / 历史 / 导出导入）
-│  ├─ app.js             UI：四种模式 + 键盘/字根表 + 提示 + 主题
+│  ├─ app.js             UI：四种模式 + 入门模式 + 键盘/字根表 + 提示 + 主题
 │  ├─ selftest.js        浏览器内自检（仅 ?selftest=1 时加载）
 │  └─ styles.css         样式（暗色为主，可切亮色）
 ├─ data/
 │  ├─ wubi86.js          码表（生成物，2.6 MB，勿手改）
 │  ├─ rootmap.js         86 版 25 键字根表 + 助记口诀
-│  └─ stories.js         内置 5 篇原创短文
+│  ├─ stories.js         内置 5 篇原创短文
+│  └─ local/             精确字根拆解（本地生成、gitignore 排除，跑 fetch_rootunits.py 才有）
 ├─ docs/                 截图
 └─ tools/
    ├─ build_data.py      数据管线（下载/过滤/补简码/出自检报告）
+   ├─ fetch_rootunits.py 精确字根拆解数据（可选层；含上游勘误与四项校验）
    ├─ report.md          数据自检报告（生成物）
-   ├─ raw/               源数据缓存（rime 码表 + 通用规范汉字表 + OpenCC 繁简表）
+   ├─ rootunits-report.md 精确拆解校验报告（生成物）
+   ├─ raw/               源数据缓存（rime 码表 + 通用规范汉字表 + 拆解表 + 字根字体）
    ├─ test_data.js       数据不变式
    ├─ test_rootmap.js    字根表反验（用码表验证字根归属）
-   ├─ test_logic.js      状态机单测（15 组约 90 条断言）
+   ├─ test_logic.js      状态机单测（17 组约 163 条断言）
    ├─ test_stories.js    内置故事校验
+   ├─ test_rootunits.js  精确拆解数据校验（没生成则跳过）
    └─ browser_check.cmd  浏览器自检（headless）
 ```
 
@@ -203,7 +230,6 @@ D:ナ    I:⺌    N:コ    C:マ    C:ス
 - **入门模式里"错字本重练 / 字表练习"没有做逐字全显**：这两个场景是 30–40 个孤立字，
   做成"每个字一张带字根的小卡"会排出 700px 高、大半是空白的卡片墙。现在它们和故事模式
   一样是"每个字显码 + 当前字给拆解"。信息一点没少，只是按需出现。想改成卡片墙就说一声。
-- 精确字根拆解层（`tools/fetch_rootunits.py`）尚未动手 —— 默认层先验证。
 
 ## 许可
 
@@ -213,7 +239,7 @@ D:ナ    I:⺌    N:コ    C:マ    C:ス
 - [LICENSE.GPL-3.0.txt](LICENSE.GPL-3.0.txt) —— 它援引的 GPL-3.0 原文
 
 ```
-Copyright (C) 2026 倪鹏生
+Copyright (C) 2026 
 
 本程序是自由软件：你可以依据自由软件基金会发布的 GNU 宽通用公共许可证
 （第 3 版，或你选择的任何更新版本）条款重新发布和/或修改它。
@@ -225,4 +251,4 @@ Copyright (C) 2026 倪鹏生
 > 派生数据的许可不能比上游更宽松，所以整仓统一用 LGPL-3.0，不做"代码宽松 / 数据严格"的拆分。
 > 第三方来源、用途与各自许可见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
 
-![选篇与导入](docs/04-picker-import.png)
+

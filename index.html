@@ -17,6 +17,7 @@
     <button class="tab" data-mode="heat">6500 字覆盖</button>
   </nav>
   <span class="spacer"></span>
+  <span class="ru-state" id="ru-state" title=""></span>
   <span class="status" id="storage-status"></span>
   <button class="iconbtn toggle" id="btn-beginner" aria-pressed="true"
           title="入门模式：显示每个字的五笔编码，并给出当前字的字根拆解">入门模式</button>
@@ -144,6 +145,10 @@
 <script src="data/wubi86.js"></script>
 <script src="data/rootmap.js"></script>
 <script src="data/stories.js"></script>
+<!-- 精确字根拆解（可选层）：这个文件由 tools/fetch_rootunits.py 生成，data/local/ 不入库。
+     没生成过时这里会有一条 404 —— 无害（界面会自动退回默认层并在右上角显示状态），
+     详见 README「字根拆解的数据是分层的」。 -->
+<script src="data/local/rootunits.js"></script>
 <script src="src/wubi-core.js"></script>
 <script src="src/stats.js"></script>
 <script src="src/app.js"></script>

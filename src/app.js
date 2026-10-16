@@ -208,32 +208,72 @@
     app.beginnerRendered = app.beginner;
   }
 
-  // 某个码位的拆解（默认层：键位 + 该键的字根集合）
-  // 精确层（本地增强数据存在时）会把这一格换成真实字根字形，见 decomposePart()
-  function decomposePart(key, i) {
-    const info = rootByKey[key];
-    if (!info) return { key: key.toUpperCase(), text: "（无用此键）", cls: "rk-none" };
-    return { key: key.toUpperCase(), text: info.roots.join(" "), cls: "rk-root", name: info.name };
+  // 精确拆解层（可选）：data/local/rootunits.js 由 tools/fetch_rootunits.py 生成、不入库。
+  // 有它才能精确到"每个码位是哪个字根"，并按实测区分识别码 / 笔画码 / 补齐位。
+  const RU = window.WUBI86_ROOTUNITS || null;
+
+  // 取某个字的逐位拆解（精确层）。返回 null 表示该字没有精确数据，调用方退回默认层。
+  function positionsOf(ch) {
+    if (!RU || !RU.rows || !RU.rows[ch]) return null;
+    const r = RU.rows[ch];
+    const code = r[0];
+    const units = Array.from(r[1]);
+    const kinds = Array.from(r[2]);
+    if (units.length !== code.length || kinds.length !== code.length) return null;
+    return { code: code, note: r[3] || "", pos: units.map((g, i) => ({ key: code[i], kind: kinds[i], glyph: g })) };
   }
 
-  // 逐位渲染成"键位 + 该键字根"的分组（故事浮注与词语参考表共用同一套渲染）
-  function rootGroupsHTML(code) {
+  // 某个码位在默认层的样子（键位 + 该键的字根集合）
+  function defaultPartHTML(key) {
+    const info = rootByKey[key];
+    if (!info) return '<span class="rp rk-none"><b>' + key.toUpperCase() + "</b><span>（无用此键）</span></span>";
+    return '<span class="rp rk-root"><b>' + key.toUpperCase() + "</b><span>" + info.roots.join(" ") + "</span></span>";
+  }
+
+  // 逐位拆解 → HTML。故事浮注与词语参考表共用这一套渲染。
+  //
+  // 精确层会把**全码的余下位**也一并解释：因为很多字的识别码落在最短码之外
+  // （想 的最短码是 3 码 shn，识别码 u 在第 4 位）—— 只讲最短码那几位，识别码就永远看不见。
+  // 余下位用「全码」分隔标出并压暗，避免和"该打哪几个字母"混淆。
+  function decompHTML(ch, opts) {
+    opts = opts || {};
+    const short = idx.shortestCode(ch);
+    if (!short) return "";
+    const full = idx.fullCode(ch) || short;
+    const precise = positionsOf(ch);
     const out = [];
-    for (let i = 0; i < code.length; i++) {
-      const p = decomposePart(code[i], i);
-      out.push('<span class="rp ' + p.cls + '"><b>' + p.key + "</b><span>" + p.text + "</span></span>");
+    if (precise && precise.code.indexOf(short) === 0) {
+      // 精确层：字形是私用区码点，必须配 data/local/zigen.ttf 才显示得出来
+      const n = Math.min(Array.from(full).length, precise.pos.length);
+      for (let i = 0; i < n; i++) {
+        if (i === short.length && n > short.length) {
+          out.push('<span class="sep" title="全码比最短码多出的部分（不用打它们也能上屏）">全码</span>');
+        }
+        const p = precise.pos[i];
+        const dim = i >= short.length ? " rest" : "";
+        const g = '<i class="zigen">' + p.glyph + "</i>";
+        const k = "<b>" + p.key.toUpperCase() + "</b>";
+        if (p.kind === "i") {
+          out.push('<span class="rp rk-id' + dim + '" title="末笔识别码：' + precise.note + '">' + g + k + "<em>识别码</em></span>");
+        } else if (p.kind === "s") {
+          out.push('<span class="rp rk-stroke' + dim + '" title="字根字按「报户口 + 首笔 + 次笔 + 末笔」取笔画">' + g + k + "<em>笔画</em></span>");
+        } else if (p.kind === "p") {
+          out.push('<span class="rp rk-pad' + dim + '" title="笔画不足时的补齐位">' + k + "<em>补齐</em></span>");
+        } else {
+          out.push('<span class="rp rk-root' + dim + '">' + g + k + "</span>");
+        }
+      }
+    } else {
+      // 默认层：给到"这一码在哪个键 + 该键有哪些字根"，不谎称就是其中某一个
+      for (let i = 0; i < short.length; i++) out.push(defaultPartHTML(short[i]));
+      if (opts.withFull && full !== short) {
+        out.push('<span class="rp rk-full"><b>全码</b><span>' + full + "</span></span>");
+      }
     }
     return out.join("");
   }
 
-  // 生成"当前字"的拆解浮注内容
-  function decomposeHTML(ch) {
-    const code = idx.shortestCode(ch);
-    if (!code) return "";
-    const full = idx.fullCode(ch);
-    const fullNote = full && full !== code ? '<span class="rp rk-full"><b>全码</b><span>' + full + "</span></span>" : "";
-    return rootGroupsHTML(code) + fullNote;
-  }
+  const decomposeHTML = (ch) => decompHTML(ch, { withFull: true });
 
   function applyStates() {
     const s = app.session;
@@ -749,8 +789,7 @@
         if (app.beginner) {
           const c3 = document.createElement("i");
           c3.className = "ccroots";
-          const code2 = idx.shortestCode(ch);
-          if (code2) c3.innerHTML = rootGroupsHTML(code2);
+          c3.innerHTML = decompHTML(ch, { withFull: false });
           cc.appendChild(c3);
         }
         d.appendChild(cc);
@@ -961,6 +1000,22 @@
       ? ""
       : "<b>进度无法保存</b>（浏览器禁用了本地存储，本次练习不落盘）";
     setBeginner(St.getPref("beginner", true), false); // 首次访问默认开
+    // 精确拆解层状态（有 data/local/rootunits.js 就是已生成）
+    (function () {
+      const el = $("ru-state");
+      if (RU && RU.rows) {
+        el.textContent = "精确拆解 ✓";
+        el.classList.add("on");
+        el.title =
+          "已加载 data/local/rootunits.js：" + RU.meta.rows + " 字，覆盖练习字集 " + RU.meta.charsetCovered +
+          " 字。逐位给出真实字根字形，并区分识别码 / 笔画码 / 补齐位。";
+      } else {
+        el.textContent = "精确拆解 未生成";
+        el.title =
+          "跑一次 python tools/fetch_rootunits.py，就能把「键位 + 该键字根集合」升级成逐位的真实字根字形。" +
+          "那份数据与字体只落本地、不入库（来源仓库没有许可文件）。";
+      }
+    })();
     renderStoryList();
     renderWrong();
     setMode("story");

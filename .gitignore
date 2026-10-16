@@ -2,6 +2,11 @@
 # 而且其中的字表转录仓库没有附许可，不适合再分发 —— 所以不入库。
 tools/raw/
 
+# data/local/ 是「精确字根拆解」的本地生成产物（拆解数据 + 字根字体，约 585 KB）。
+# 来源 hantang/search-wubi 没有许可文件，字体也疑似 SimHei 子集 —— 不能随仓库分发。
+# 它由 tools/fetch_rootunits.py 生成，跑一次就有。
+data/local/
+
 # 编辑器 / 系统
 .vscode/
 .idea/

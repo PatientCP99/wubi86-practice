@@ -3,6 +3,14 @@
      header 顶部 / main 正文（可滚动）/ 左下固定 dock(输入条 + 迷你键盘↔字根表) / 右下统计条
    输入条放在 dock 内部, 所以字根表原地放大时不会盖住输入行。 */
 
+/* 精确字根拆解用的字根字体（data/local/zigen.ttf，由 tools/fetch_rootunits.py 生成）。
+   浏览器只在真正用到这个 family 时才去取字体 —— 没生成过数据时不会产生字体请求。 */
+@font-face {
+  font-family: "ZiGen";
+  src: url("../data/local/zigen.ttf") format("truetype");
+  font-display: swap;
+}
+
 :root {
   --bg: #14161a;
   --bg-soft: #1c1f26;
@@ -177,14 +185,27 @@ body.beginner .text .ch .code {
 }
 .text .ch .roots .rp { display: inline-flex; gap: 4px; align-items: baseline; }
 .text .ch .roots .rp b { font-family: Consolas, monospace; font-size: 13px; color: var(--accent); }
-/* 尾码区分（入门模式 + 本地精确拆解数据时才会出现 rk-id / rk-stroke / rk-pad） */
+.text .ch .roots .rp em { font-style: normal; font-size: 10px; color: var(--warn-fg); }
+/* 全码比最短码多出来的部分：压暗，避免和"该打哪几个字母"混淆 */
+.text .ch .roots .rp.rest { opacity: 0.62; }
+.text .ch .roots .sep {
+  align-self: center;
+  padding: 0 5px;
+  font-size: 10px;
+  color: var(--fg-faint);
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+/* 尾码区分：识别码 / 笔画码 / 补齐位（只有本地精确拆解数据存在时才会出现） */
 .text .ch .roots .rk-id { color: var(--warn-fg); }
 .text .ch .roots .rk-id b { color: var(--warn-fg); }
+.text .ch .roots .rk-stroke em,
+.text .ch .roots .rk-pad em { color: var(--fg-faint); }
 .text .ch .roots .rk-stroke,
 .text .ch .roots .rk-pad,
 .text .ch .roots .rk-full { color: var(--fg-dim); }
 .text .ch .roots .rk-full b { color: var(--fg-dim); font-size: 12px; }
-.text .ch .roots .zigen { font-family: "ZiGen", serif; font-size: 17px; }
+.text .ch .roots .zigen { font-family: "ZiGen", serif; font-size: 17px; line-height: 1; }
 
 /* 可整打提示：贴在光标处那个词的首字上方 */
 .text .ch .wordtag {
@@ -564,10 +585,17 @@ body.beginner .text .ch .code {
 }
 .wordlist .ccroots .rp { display: inline-flex; gap: 3px; align-items: baseline; }
 .wordlist .ccroots .rp b { font-family: Consolas, monospace; font-size: 12px; color: var(--accent); }
+.wordlist .ccroots .rp em { font-style: normal; font-size: 9px; color: var(--warn-fg); }
+.wordlist .ccroots .zigen { font-family: "ZiGen", serif; font-size: 16px; line-height: 1; color: var(--fg); }
 .wordlist .ccroots .rk-id { color: var(--warn-fg); }
 .wordlist .ccroots .rk-id b { color: var(--warn-fg); }
 .wordlist .ccroots .rk-stroke,
 .wordlist .ccroots .rk-pad { color: var(--fg-faint); }
+.wordlist .ccroots .rk-stroke em,
+.wordlist .ccroots .rk-pad em { color: var(--fg-faint); }
+/* 精确拆解层状态提示 */
+.ru-state { font-size: 11px; color: var(--fg-faint); }
+.ru-state.on { color: var(--done-fg); }
 
 @media (max-width: 1180px) {
   .root .rroots { font-size: 13px; }

@@ -16,7 +16,7 @@ if not defined CHROME (
   exit /b 2
 )
 set "OUT=%TEMP%\wubi86_selftest.txt"
-"!CHROME!" --headless=new --disable-gpu --no-sandbox --virtual-time-budget=12000 --dump-dom "file:///!ROOT:\=/!/index.html?selftest=1" > "!OUT!" 2>nul
+"!CHROME!" --headless=new --disable-gpu --no-sandbox --virtual-time-budget=25000 --dump-dom "file:///!ROOT:\=/!/index.html?selftest=1" > "!OUT!" 2>nul
 findstr /C:"<title>SELFTEST" "!OUT!" >nul
 if errorlevel 1 (
   echo [X] 自检没有跑完。原始输出: !OUT!

@@ -25,6 +25,8 @@
 
   function run() {
     const idx = Core.build(D);
+    // 精确字根拆解层是否存在，决定后面很多断言走哪条分支
+    const preciseOn = !!(window.WUBI86_ROOTUNITS && window.WUBI86_ROOTUNITS.rows);
 
     // ---------------------------------------------------------- 数据
     group("数据不变式");
@@ -202,7 +204,11 @@
       "每个字给出自己的最短码"
     );
     const ccr = document.querySelector("#words-list .w .cc .ccroots");
-    ok(ccr && ccr.textContent.length > 5, "入门模式下逐字给出字根拆解", ccr && ccr.textContent.slice(0, 24));
+    ok(
+      ccr && (preciseOn ? ccr.querySelectorAll(".zigen").length > 0 : ccr.textContent.length > 5),
+      "入门模式下逐字给出字根拆解",
+      ccr && (preciseOn ? ccr.querySelectorAll(".zigen").length + " 个字形" : ccr.textContent.slice(0, 18))
+    );
     const skipBefore = app.app.session.cursor;
     document.getElementById("btn-words-skip").click();
     ok(app.app.session.cursor > skipBefore, "「跳过当前词」推进光标", app.app.session.cursor);
@@ -241,8 +247,12 @@
     eq(cells2[2].querySelector(".code").textContent, "d", "在 的编码行 = d（一级简码）");
     const rootsEl = cells2[0].querySelector(".roots");
     ok(!!rootsEl, "当前字有字根拆解浮注");
-    ok(/^A/.test(rootsEl.textContent.replace(/\s+/g, "")), "浮注以键位 A 开头", rootsEl.textContent);
-    ok(/工/.test(rootsEl.textContent) && /七/.test(rootsEl.textContent), "浮注列出了 A 键的字根集合（默认层）");
+    ok(/A/.test(rootsEl.textContent), "浮注里出现键位 A", rootsEl.textContent.slice(0, 24));
+    if (preciseOn) {
+      ok(rootsEl.querySelectorAll(".zigen").length > 0, "精确层：浮注用字根字形", rootsEl.textContent.length);
+    } else {
+      ok(/工/.test(rootsEl.textContent) && /七/.test(rootsEl.textContent), "默认层：浮注列出 A 键的字根集合");
+    }
     ok(/全码/.test(document.getElementById("ime-tip").textContent), "输入条额外给出全码");
 
     // 可整打提示
@@ -301,6 +311,46 @@
     ok(parsed && parsed.chars["工"] && parsed.chars["工"].seenBeginner >= 1, "入门模式的上屏记进 seenBeginner");
     ok(parsed && parsed.chars["工"] && !(parsed.chars["工"].seen > 0), "入门模式的上屏不计入 seen（掌握度）");
     ok(parsed && parsed.totals.charsBeginner >= 1, "totals.charsBeginner 有计数");
+
+    // ---------------------------------------------------------- 精确拆解层（可选）
+    group("精确字根拆解层");
+    const RUx = window.WUBI86_ROOTUNITS;
+    const ruState = document.getElementById("ru-state");
+    app.setBeginner(true, false); // 拆解只在入门模式下渲染
+    if (RUx && RUx.rows) {
+      results.push("  ..    已加载 " + RUx.meta.rows + " 字，覆盖练习字集 " + RUx.meta.charsetCovered + " 字");
+      ok(/精确拆解/.test(ruState.textContent), "右上角状态显示已启用", ruState.textContent);
+      app.startSession("想", "自检-精确", null, 0);
+      const rootEl = document.querySelector("#run-text .ch .roots");
+      ok(!!rootEl, "当前字有拆解浮注");
+      // 想 的最短码是 3 码 shn，识别码 u 在第 4 位 —— 浮注必须把全码余下位也讲清楚
+      eq(rootEl.querySelectorAll(".zigen").length, 4, "想=shnu：四位都用真实字根字形（含全码余下位）");
+      ok(!!rootEl.querySelector(".sep"), "最短码之外的部分用「全码」分隔标出");
+      eq(rootEl.querySelectorAll(".rp.rest").length, 1, "全码余下位压暗（只有 1 位）");
+      const idSpan = rootEl.querySelector(".rk-id");
+      ok(!!idSpan, "末位标成识别码而不是字根");
+      ok(/识别码/.test(idSpan ? idSpan.textContent : ""), "识别码位带「识别码」标签", idSpan && idSpan.textContent);
+      ok(/末笔捺/.test(idSpan ? idSpan.getAttribute("title") : ""), "识别码位用 title 给出末笔·结构",
+        idSpan && idSpan.getAttribute("title"));
+      app.startSession("十", "自检-笔画码", null, 0);
+      const st10 = document.querySelector("#run-text .ch .roots");
+      eq(st10.querySelectorAll(".rk-stroke").length, 2, "十=fgh：后两位是笔画码");
+      eq(st10.querySelectorAll(".rk-id").length, 0, "十 没有识别码位");
+      app.startSession("𬉼", "自检-退回", null, 0);
+      const stx = document.querySelector("#run-text .ch .roots");
+      ok(stx && stx.querySelectorAll(".zigen").length === 0, "上游无拆解数据的字退回默认层（不画字形）");
+      ok(stx && /[A-Y]/.test(stx.textContent), "退回后仍给出键位", stx && stx.textContent.slice(0, 24));
+    } else {
+      results.push("  ..    未生成 —— 只验默认层");
+      ok(/未生成/.test(ruState.textContent), "右上角状态显示未生成", ruState.textContent);
+      app.startSession("想", "自检-默认层", null, 0);
+      const rootEl = document.querySelector("#run-text .ch .roots");
+      ok(!!rootEl, "当前字有拆解浮注");
+      eq(rootEl.querySelectorAll(".zigen").length, 0, "默认层没有字根字形");
+      ok(/[A-Y]/.test(rootEl.textContent), "默认层给出键位", rootEl.textContent.slice(0, 24));
+      ok(rootEl.textContent.length > 24, "默认层给出该键的字根集合", rootEl.textContent.length);
+    }
+    app.setBeginner(false, false); // 还原（后面的用例默认非入门）
 
     // Tab 长按（异步）
     const tabBefore = document.getElementById("ime-tip").textContent;
