@@ -7,6 +7,10 @@ tools/raw/
 # 它由 tools/fetch_rootunits.py 生成，跑一次就有。
 data/local/
 
+# 视觉工具（DSH vision toolkit）的裁剪/描摹/对比产物：属于本地工作痕迹，不是项目内容。
+# 用一次 vision_crop / vision_trace / pixel_diff 就会在这里落文件，别让它们进提交。
+.dsh-vision-toolkit/
+
 # 编辑器 / 系统
 .vscode/
 .idea/
