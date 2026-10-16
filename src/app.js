@@ -488,9 +488,8 @@
     app.tries = 0;
     app.hintOn = false;
     if (resumeAt) {
-      // 断点续打: 直接跳过已完成的字数（不计对错）
-      while (app.session.cursor < resumeAt && !app.session.isDone()) app.session.skip();
-      app.session.stats.skips = 0;
+      // 断点续打: 直接把光标挪到上次的位置（精确，不按词跳），不计对错
+      app.session.seek(resumeAt);
     }
     const el = textContainerId || "run-text";
     if (el === "run-text") {
@@ -682,7 +681,10 @@
     else if (app.session) startSession(app.session.display.join(""), app.label, app.cursorKey, 0);
   });
 
-  $("custom-text").addEventListener("input", () => {
+  // ---------------------------------------------------------------- 粘贴自己的文本
+  // 粘贴框的内容与它的断点都会存进 localStorage（prefs.customText / prefs.customRun +
+  // stories.custom），所以下次打开还在，练到一半关掉也能接着打。
+  function updateCustomCheck() {
     const txt = $("custom-text").value;
     const chars = Array.from(txt).filter((c) => Core.isHanzi(c));
     const set = new Set(chars);
@@ -692,14 +694,35 @@
       if (!inCharset(c)) out++;
       if (!idx.shortestCode(c)) nocode++;
     }
-    $("custom-check").textContent = chars.length
-      ? chars.length + " 字 / " + set.size + " 个字种 · 超纲 " + out + " 个" + (nocode ? " · 无码 " + nocode + " 个（会跳过）" : "")
-      : "";
+    const bits = [];
+    if (chars.length) {
+      bits.push(chars.length + " 字 / " + set.size + " 个字种 · 超纲 " + out + " 个" + (nocode ? " · 无码 " + nocode + " 个（会跳过）" : ""));
+    }
+    const saved = customResumeAt();
+    if (saved > 0) bits.push("已存断点：继续第 " + (saved + 1) + " 字");
+    $("custom-check").textContent = bits.join("　·　");
+  }
+  // 这段文本上次练到哪了？（文本变了就当没练过）
+  function customResumeAt() {
+    const txt = $("custom-text").value.trim();
+    if (!txt || St.getPref("customRun", "") !== txt) return 0;
+    const at = St.storyCursor("custom");
+    return at > 0 ? at : 0;
+  }
+  let customSaveTimer = 0;
+  $("custom-text").addEventListener("input", () => {
+    updateCustomCheck();
+    // 输入时也存（攒 800ms），免得打了一半刷新就没了
+    clearTimeout(customSaveTimer);
+    customSaveTimer = setTimeout(() => St.setPref("customText", $("custom-text").value), 800);
   });
   $("btn-custom-start").addEventListener("click", () => {
     const txt = $("custom-text").value.trim();
     if (!txt) return toast("先粘贴一段文本", true);
-    startSession(txt, "自定义文本", null, 0);
+    const at = customResumeAt();
+    St.setPref("customText", $("custom-text").value);
+    St.setPref("customRun", txt);
+    startSession(txt, at > 0 ? "自定义文本（续打）" : "自定义文本", "custom", at);
     activate();
   });
 
@@ -1016,14 +1039,28 @@
           "那份数据与字体只落本地、不入库（来源仓库没有许可文件）。";
       }
     })();
+    // 粘贴框内容回填（上次存过就还在），并刷新"超纲 N 字 / 已存断点"提示
+    $("custom-text").value = St.getPref("customText", "");
+    updateCustomCheck();
     renderStoryList();
     renderWrong();
     setMode("story");
     renderIme();
     updateStats();
     setInterval(updateStats, 700);
-    window.addEventListener("beforeunload", () => {
-      if (app.session && app.cursorKey) St.setStoryCursor(app.cursorKey, app.session.cursor, app.session.plan.length);
+    // 离开页面 / 切到后台时立刻落盘：节流写盘最多会攒 1.2 秒，
+    // 这里保证"关掉网页"这一步不会丢掉最后这几个字。
+    function leavePersist() {
+      if (app.session) {
+        if (app.cursorKey) St.setStoryCursor(app.cursorKey, app.session.cursor, app.session.plan.length);
+        St.saveSoon();
+      }
+      St.flush();
+    }
+    window.addEventListener("beforeunload", leavePersist);
+    window.addEventListener("pagehide", leavePersist);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") leavePersist();
     });
     applyQuery();
   }

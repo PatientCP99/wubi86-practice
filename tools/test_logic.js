@@ -440,5 +440,32 @@ eq(idx.keyAt("fghy", 0), "f", "fghy 第 0 位在 F 键");
 eq(idx.keyAt("fghy", 3), "y", "fghy 第 3 位在 Y 键");
 eq(idx.keyAt("fghy", 9), null, "越界返回 null");
 
+// ---------------------------------------------------------------- 18. 续打定位
+section("[18] 续打定位 seek（不能越过一个词）");
+{
+  // 我们 是词；seek(1) 必须精确落在第 1 个字，而不是被"最长匹配词"带到第 2 个
+  const s = Core.createSession(idx, { text: "我们天" });
+  s.seek(1);
+  eq(s.cursor, 1, "seek(1) 精确落在第 1 个字");
+  eq(s.hint().char, "们", "seek 后目标确实是第 1 个字（们）");
+  eq(s.buffer, "", "seek 会清空缓冲");
+  // 对照：skip 是按词前进的 —— 这正是不能用它做续打的原因
+  const s2 = Core.createSession(idx, { text: "我们天" });
+  s2.skip();
+  eq(s2.cursor, 2, "skip() 一次会跨过整个词（所以续打不能用它）");
+}
+{
+  const s = Core.createSession(idx, { text: "天地人" });
+  s.seek(999);
+  eq(s.cursor, s.plan.length, "seek 越界 -> 夹到末尾（视为已完成）");
+  ok(s.isDone(), "夹到末尾后 isDone 为真");
+  s.seek(-5);
+  eq(s.cursor, 0, "seek 负数 -> 夹到 0");
+  s.seek(2);
+  eq(s.cursor, 2, "seek 到中间");
+  s.press("Backspace");
+  eq(s.cursor, 2, "seek 后没有撤销历史 -> 退格不会回退到上次会话的字");
+}
+
 console.log("\n" + (failed ? "FAILED: " + failed + " 项" : "ALL PASS") + "\n");
 process.exit(failed ? 1 : 0);

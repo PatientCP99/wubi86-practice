@@ -356,18 +356,63 @@
     }
     app.setBeginner(false, false); // 还原（后面的用例默认非入门）
 
-    // Tab 长按（异步）
-    const tabBefore = document.getElementById("ime-tip").textContent;
-    key("Tab");
+    // ---------------------------------------------------------- 进度落盘
+    // 这两组要等 debounce，所以放在异步尾巴里，最后再接 Tab 长按那一段
+    group("进度落盘（节流写盘 + 离开页面 flush）");
+    const KEY = window.WubiStats.KEY;
+    const has = (s) => (localStorage.getItem(KEY) || "").indexOf(s) >= 0;
+    // 用 森（本次自检没打过）观察落盘时机；会话不带 cursorKey，正是原先"中途关会丢"的那类
+    app.startSession("森", "自检-落盘", null, 0);
+    const senCode = Array.from(app.idx.shortestCode("森"));
+    for (const k of senCode) key(k);
+    key(" ");
+    ok(app.app.session.stats.commits >= 1, "森 已上屏", app.app.session.stats.commits);
+    ok(window.WubiStats.hasPendingSave(), "上屏后有待写的节流任务（不是每敲一下都写盘）");
+    results.push("  ..    此刻 localStorage " + (has("森") ? "已含 森" : "尚未含 森（还在节流窗口内）"));
+    window.dispatchEvent(new Event("pagehide")); // 等同"关掉网页 / 切到后台"
+    ok(has("森"), "派发 pagehide 后立刻落盘 —— 中途关掉不丢");
+    ok(!window.WubiStats.hasPendingSave(), "flush 之后没有残留的待写任务");
+
     setTimeout(function () {
-      key("Tab"); // 不会触发，只是确保 keyup 前不重复起计时器
+      group("粘贴文本会存下来 + 能续打");
+      const ta = document.getElementById("custom-text");
+      ta.value = "天地人";
+      ta.dispatchEvent(new Event("input"));
       setTimeout(function () {
-        const tip = document.getElementById("ime-tip").textContent || document.getElementById("ime-tip").innerHTML;
-        ok(/还差|完整码|上屏/.test(tip), "长按 Tab 350ms -> 提示缺哪几个字母", tip);
-        document.dispatchEvent(new KeyboardEvent("keyup", { key: "Tab", bubbles: true }));
-        finish();
-      }, 260);
-    }, 420);
+        eq(window.WubiStats.getPref("customText", ""), "天地人", "输入 800ms 后粘贴内容写进偏好");
+        document.getElementById("btn-custom-start").click();
+        eq(app.app.session.cursor, 0, "首次开始 -> 从第 0 字起");
+        const tian = Array.from(app.idx.shortestCode("天"));
+        for (const k of tian) key(k);
+        key(" ");
+        ok(app.app.session.cursor >= 1, "打掉了第一个字", app.app.session.cursor);
+        const at = window.WubiStats.storyCursor("custom");
+        ok(at >= 1, "自定义文本的断点已写盘", at);
+        // 再点一次「开始练」= 等同"关掉网页重新打开后再开始"
+        document.getElementById("btn-custom-start").click();
+        eq(app.app.session.cursor, at, "再开始时从断点续打");
+        ok(/续打/.test(document.getElementById("run-title").textContent), "标题标明是续打",
+          document.getElementById("run-title").textContent);
+        // 换一段文本 -> 断点应当作废，从 0 起
+        ta.value = "山水";
+        ta.dispatchEvent(new Event("input"));
+        document.getElementById("btn-custom-start").click();
+        eq(app.app.session.cursor, 0, "换了文本 -> 断点作废，从头开始");
+
+        // Tab 长按（异步）
+        const tabBefore = document.getElementById("ime-tip").textContent;
+        key("Tab");
+        setTimeout(function () {
+          key("Tab"); // 不会触发，只是确保 keyup 前不重复起计时器
+          setTimeout(function () {
+            const tip = document.getElementById("ime-tip").textContent || document.getElementById("ime-tip").innerHTML;
+            ok(/还差|完整码|上屏/.test(tip), "长按 Tab 350ms -> 提示缺哪几个字母", tip);
+            document.dispatchEvent(new KeyboardEvent("keyup", { key: "Tab", bubbles: true }));
+            finish();
+          }, 260);
+        }, 420);
+      }, 950); // 等 debounce(800ms) 落地
+    }, 10);
   }
 
   function finish() {

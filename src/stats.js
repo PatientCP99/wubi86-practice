@@ -78,6 +78,31 @@
     return writeStorage();
   }
 
+  // 节流写盘：字级统计每上屏一个字就变一次，但每敲一下就写 localStorage 太浪费（同步 IO）。
+  // 攒 1.2 秒写一次；页面要走了（beforeunload / 切到后台）调 flush() 立刻落盘。
+  //
+  // 为什么需要：原先只有 setStoryCursor / addSession / setPref 会写盘，于是
+  // 词语、错字本重练、字表练习、自定义文本这几个**没有断点 id** 的模式，
+  // 练到一半关掉网页会丢掉整段字级统计（热力图、错字本、时长都受影响）。
+  let saveTimer = 0;
+  function saveSoon() {
+    if (saveTimer) return;
+    saveTimer = (root.setTimeout || setTimeout)(function () {
+      saveTimer = 0;
+      save();
+    }, 1200);
+  }
+  function flush() {
+    if (saveTimer) {
+      (root.clearTimeout || clearTimeout)(saveTimer);
+      saveTimer = 0;
+    }
+    return save();
+  }
+  function hasPendingSave() {
+    return !!saveTimer;
+  }
+
   // ------------------------------------------------------------ 写入
   function setStoryCursor(id, cursor, total) {
     if (!id) return;
@@ -126,10 +151,12 @@
       if (want.length === 1) bumpChar(want[0], "wrong");
       data.totals.wrong++;
     }
+    saveSoon();
   }
   function recordHint(ch) {
     if (ch) bumpChar(ch, "hint");
     data.totals.hints++;
+    saveSoon();
   }
 
   // ------------------------------------------------------------ 界面偏好
@@ -243,6 +270,9 @@
     storyCursor: storyCursor,
     recordCommit: recordCommit,
     recordHint: recordHint,
+    saveSoon: saveSoon,
+    flush: flush,
+    hasPendingSave: hasPendingSave,
     getPref: getPref,
     setPref: setPref,
     addSession: addSession,

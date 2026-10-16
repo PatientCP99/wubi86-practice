@@ -261,6 +261,20 @@
         refresh();
       },
 
+      // 把光标直接挪到第 n 个 plan 位置（续打用）。
+      //
+      // 不能用 skip() 循环代替：skip 是按"最长匹配词"前进的，续打点若落在一个词的开头
+      // 就会多跳 1-2 个字，把没打过的字标成已打（"天地人" 里 天地 是词，续打第 1 字会跳到 2）。
+      seek: function (n) {
+        const to = Math.max(0, Math.min(plan.length, Math.floor(n) || 0));
+        s.cursor = to;
+        s.buffer = "";
+        s.page = 0;
+        s.history.length = 0; // 上一次会话打的字没有撤销记录，别让退格回退过去
+        refresh();
+        return { type: "seek", cursor: to };
+      },
+
       // 跳过当前目标（当前词或当前字），不计对错、不计入 correct
       skip: function () {
         if (s.isDone()) return { type: "noop" };
