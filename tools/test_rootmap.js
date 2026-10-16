@@ -28,6 +28,9 @@ function ok(cond, label, detail) {
     console.log("  FAIL  " + label + (detail ? "  -> " + detail : ""));
   }
 }
+function eq(actual, expected, label) {
+  ok(actual === expected, label, "期望 " + JSON.stringify(expected) + "，实得 " + JSON.stringify(actual));
+}
 
 // 单字 -> 全部编码
 const charCodes = new Map();
@@ -105,9 +108,24 @@ ok(
   "componentRoots 里的每一项都确实在该键 roots 里"
 );
 
-console.log("\n[4] 待人工核对的偏旁字根（码表里查不到单字编码）");
+console.log("\n[4] 只能作偏旁的字根（码表里查不到单字编码，无法自动验证）");
 console.log("  " + unknown.map((u) => u.key.toUpperCase() + ":" + u.glyph).join("  "));
-console.log("  共 " + unknown.length + " 个 —— 这些只能靠人眼对着字根表核。");
+console.log("  共 " + unknown.length + " 个");
+
+// 这一组是整份字根表里唯一无法用码表反验的部分，所以要求"人工核对过"这件事被显式记录在数据里，
+// 否则过一阵没人知道它到底核没核过（也免得每次都被当成待办）。
+const hv = R.humanVerified;
+ok(!!hv && !!hv.date && Array.isArray(hv.items) && hv.items.length > 0, "数据里记录了人工核对（humanVerified）");
+if (hv) {
+  const listed = hv.items.map((x) => x.key + ":" + x.glyph).sort();
+  const found = unknown.map((u) => u.key + ":" + u.glyph).sort();
+  eq(listed.join(","), found.join(","), "humanVerified 记录的内容与实测出来的完全一致（不多不少）");
+  for (const it of hv.items) {
+    const row = R.rows.filter((r) => r.key === it.key)[0];
+    ok(!!row && row.roots.indexOf(it.glyph) >= 0, `核对项 ${it.key.toUpperCase()}:${it.glyph} 确实在该键 roots 里`);
+  }
+  console.log("  核对日期 " + hv.date + "，结论: " + hv.result);
+}
 
 console.log("\n" + (failed ? "FAILED: " + failed + " 项" : "ALL PASS") + "\n");
 process.exit(failed ? 1 : 0);
