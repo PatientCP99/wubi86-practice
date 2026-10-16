@@ -208,14 +208,27 @@ def main():
     single, phrase = dedupe(single), dedupe(phrase)
 
     # 补齐缺失的二级简码（stem 列给出但无独立行）
+    #
+    # 但要剔掉一类伪条目：源码表给**一级简码字**的 stem 写的是它的"前两码"
+    # （工 a -> stem aa、一 g -> stem gg、的 r -> stem rq）。那是一级简码字的冗余前缀，
+    # 不是它的二级简码 —— 五笔里每个二级码只归一个字，aa 其实是 式 的二级简码。
+    # 不剔掉的话，因为一级简码字带着十亿级语料权重，敲 aa+空格 会上屏 工 而不是 式。
+    # 独立证据：极点五笔码表（KyleBing/rime-wubi86-jidian，Apache-2.0）里这 18 个码
+    # 全都有主，而且全都不是这些一级简码字。
     have = {(t, c) for t, c, _ in single}
+    one_code = {t for t, c, _ in single if len(c) == 1}
     added = []
+    dropped_stem = []
     for ch, ss in sorted(stems.items()):
         for s in sorted(ss):
-            if (ch, s) not in have:
-                have.add((ch, s))
-                single.append((ch, s, weight[ch]))
-                added.append((ch, s))
+            if (ch, s) in have:
+                continue
+            if ch in one_code:
+                dropped_stem.append((ch, s))
+                continue
+            have.add((ch, s))
+            single.append((ch, s, weight[ch]))
+            added.append((ch, s))
 
     single.sort(key=lambda r: (r[1], -r[2], r[0]))
     phrase.sort(key=lambda r: (r[1], -r[2], r[0]))
@@ -395,6 +408,19 @@ def main():
     for ch, s in added:
         md.append("| %s | `%s` |" % (ch, s))
     md.append("")
+    md.append("## 剔掉的伪简码（一级简码字的前缀，那是别人的二级码）\n")
+    md.append("源码表给一级简码字的 stem 写的是它自己的前两码，而那两码其实是**别的字**")
+    md.append("的二级简码（例如 `aa` 是 `式`）。这些一级简码字又带着十亿级语料权重，")
+    md.append("留着会让 `aa`+空格 上屏 `工`。独立验证：极点五笔码表里这 %d 个码全都有主，"
+              % len(dropped_stem))
+    md.append("且全不是这些一级简码字。\n")
+    md.append("| 字 | 剔掉的前缀码 | 该码真正的二级简码 |\n|---|---|---|")
+    owner = {}
+    for t, c, _ in single:
+        owner.setdefault(c, t)
+    for ch, s in dropped_stem:
+        md.append("| %s | `%s` | %s |" % (ch, s, owner.get(s, "（无主，空码）")))
+    md.append("")
     md.append("## charset 偏向纠正的码（前 40）\n")
     md.append("| 码 | 权重首位(非字集) | 其后 |\n|---|---|---|")
     for c, top, rest in bias[:40]:
@@ -449,6 +475,8 @@ def main():
     print("    最短码长度分布 %s" % ", ".join("%d码:%d" % (k, v) for k, v in sorted(len_hist.items())))
     print("    4码要选字 %d 个code, 4码含字集字 %d 个code, 无4码字 %d, 3码叶子自动上屏 %d 字, 补简码 %d 条"
           % (len(dup4), len(dup4_any), len(no4), len(auto3), len(added)))
+    print("    剔掉一级简码字的前缀伪简码 %d 条: %s"
+          % (len(dropped_stem), " ".join("%s%s" % (ch, s) for ch, s in dropped_stem)))
     print("    charset 偏向纠正的码 %d 个" % len(bias))
     print("    可用词条(词长%d-%d, 去站点词) %d" % (WORD_MIN_LEN, WORD_MAX_LEN, len(wl)))
     print("    report: tools/report.md")

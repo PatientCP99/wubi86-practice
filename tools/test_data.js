@@ -196,5 +196,45 @@ const usable = phrase.filter(
 info("可用词条（词长 2-4，去停用词）", usable.length);
 ok(usable.length > 50000, "可用词条 > 50000", String(usable.length));
 
+// ---------------------------------------------------------------- 8. 二级简码归属
+console.log("\n[8] 二级简码归属（一级简码字不得占用别人的二级码）");
+// 源码表给 25 个一级简码字的 stem 列写的是它自己的前两码（工 a -> aa、一 g -> gg），
+// 而那两码其实是**别人的**二级简码。曾经把它们当二级简码补进数据，于是敲 aa+空格 上屏
+// 工 而不是 式 —— 一级简码字带着十亿级语料权重，必然排第一，这是会打错字的 bug。
+// 归属已由极点五笔码表（KyleBing/rime-wubi86-jidian，Apache-2.0）独立验证。
+const oneChars = new Set(single.filter((r) => r.code.length === 1).map((r) => r.text));
+eq(oneChars.size, 25, "一级简码字 = 25 个");
+const byCodeW = new Map();
+for (const r of single) {
+  if (!byCodeW.has(r.code)) byCodeW.set(r.code, []);
+  byCodeW.get(r.code).push(r);
+}
+// 按应用真实的候选排序规则取首选：(字集内优先, 权重降序, 文字升序)
+function topOf(code) {
+  const list = (byCodeW.get(code) || []).slice().sort((a, b) =>
+    (inCs(b.text) ? 1 : 0) - (inCs(a.text) ? 1 : 0) || b.weight - a.weight || (a.text < b.text ? -1 : a.text > b.text ? 1 : 0));
+  return list[0];
+}
+const FIXED = { aa: "式", gg: "五", rq: "换", bn: "也", dh: "丰", hh: "止", jg: "量", lg: "车", tk: "各", ww: "从" };
+for (const c of Object.keys(FIXED)) {
+  const t = topOf(c);
+  eq(t && t.text, FIXED[c], "二级码 " + c + " 首选 " + FIXED[c] + "（换数据源会在这里先炸）");
+}
+const DROPPED = { aa: "工", gg: "一", rq: "的", bn: "了", dh: "在", hh: "上", jg: "是",
+  lg: "国", tk: "和", ww: "人", ny: "以", nt: "发", tr: "我", de: "有" };
+const stillBad = [];
+for (const c of Object.keys(DROPPED)) {
+  if ((byCodeW.get(c) || []).some((r) => r.text === DROPPED[c])) stillBad.push(c + ":" + DROPPED[c]);
+}
+eq(stillBad.length, 0, "14 条伪二级码都不再属于那个一级简码字", stillBad.join(" "));
+// 反向：源码表里**有独立行**的二级码是真简码，不能被误伤
+const KEPT = { fb: "地", kh: "中", mg: "同", na: "民" };
+for (const c of Object.keys(KEPT)) {
+  ok((byCodeW.get(c) || []).some((r) => r.text === KEPT[c]), "二级码 " + c + " 仍归 " + KEPT[c] + "（源码表有独立行）",
+    (byCodeW.get(c) || []).map((r) => r.text).join("/"));
+}
+const twoCodes = new Set(single.filter((r) => r.code.length === 2).map((r) => r.code));
+eq(twoCodes.size, 616, "二级码 = 616 个（极点五笔同样 616 个）");
+
 console.log("\n" + (failed ? "FAILED: " + failed + " 项" : "ALL PASS") + "\n");
 process.exit(failed ? 1 : 0);
