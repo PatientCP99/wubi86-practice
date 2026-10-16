@@ -145,12 +145,30 @@ def parse_dict_singles():
 
 
 def parse_rootmap():
-    """从 data/rootmap.js 取 键 -> 字根清单（判断一个字是不是"字根字"要用）"""
+    """从 data/rootmap.js 取 键 -> 字根清单（判断一个字是不是"字根字"要用）
+
+    别把正则写松了：这个文件除 rows 之外，humanVerified.items 也带 key 字段。
+    早先的写法 `key: "x".*?roots: [...]`（re.S）会把 humanVerified 里的 key 和**下一行**的
+    roots 配成一对 —— 结果是 g 键整个丢失、其余键错位，12 个码位的类别因此算错
+    （首码为 g 的字根字不再被认作字根字，笔画码/补齐位被算成字根）。
+    所以这里要求 key 后面紧跟 name，并把"25 个键都在""键名字必须在自己键的字根里"做成硬断言。
+    """
     js = open(os.path.join(ROOT, "data", "rootmap.js"), encoding="utf-8").read()
     out = {}
-    for m in re.finditer(r'key:\s*"([a-y])".*?roots:\s*\[(.*?)\]', js, re.S):
-        key = m.group(1)
-        out[key] = [x.strip().strip('"') for x in m.group(2).split(",") if x.strip()]
+    names = {}
+    for m in re.finditer(r'\{\s*key:\s*"([a-y])",\s*name:\s*"([^"]*)",.*?roots:\s*\[([^\]]*)\]', js, re.S):
+        key, name, roots = m.group(1), m.group(2), m.group(3)
+        if key in out:
+            raise SystemExit("FATAL: 解析 data/rootmap.js 时键 %s 出现两次" % key)
+        out[key] = [x.strip().strip('"') for x in roots.split(",") if x.strip()]
+        names[key] = name
+    expect = set("abcdefghijklmnopqrstuvwxy")
+    if set(out) != expect:
+        raise SystemExit("FATAL: 解析 data/rootmap.js 只得到 %d 个键，缺 %s —— 正则被文件结构带偏了"
+                         % (len(out), "".join(sorted(expect - set(out)))))
+    for key, name in names.items():
+        if name not in out[key]:
+            raise SystemExit("FATAL: %s 键的键名字 %s 不在它自己的字根里（解析错位）" % (key.upper(), name))
     return out
 
 
