@@ -21,3 +21,6 @@ desktop.ini
 # 临时产物
 *.tmp
 *.log
+
+# 接手文档
+./docs/五笔86-接手文档.md
