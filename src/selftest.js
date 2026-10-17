@@ -134,6 +134,20 @@
     eq(nameBad, 0, "25 个键名字都在自己键的字根里");
     eq(rootBad, 0, "可查字根的首码都等于本键（偏旁例外已声明）");
 
+    // 私用区(PUA)字根支持：这类码位只有 data/local/zigen.ttf 里有形状，
+    // 必须被渲染成 .zigen（ZiGen 字体）才不是豆腐块。断言"有几个 PUA 字根就有几个 .zigen"，
+    // 两种情况都成立：内置数据 0 个 -> 0 个；本地自己放进去的 PUA -> 同样数量。
+    const puaRoots = [];
+    for (const r of ROOTMAP.rows) {
+      for (const g of r.roots) {
+        const c = g.codePointAt(0);
+        if ((c >= 0xe000 && c <= 0xf8ff) || (c >= 0xf0000 && c <= 0x10fffd)) puaRoots.push(r.key + ":" + g);
+      }
+    }
+    const ziCount = document.querySelectorAll("#keys-root .rroots .zigen").length;
+    eq(ziCount, puaRoots.length, "私用区字根全部套上了字根字体（" + puaRoots.length + " 个）");
+    if (puaRoots.length) results.push("  ..    字根表里有 " + puaRoots.length + " 个 PUA 字形（需要 data/local/zigen.ttf 才能显示）");
+
     // ---------------------------------------------------------- 故事
     group("内置故事");
     let storyOut = 0;

@@ -58,6 +58,14 @@
   for (const r of ROOTMAP.rows) rootByKey[r.key] = r;
 
   function buildKeys() {
+    // 字根里的私用区(PUA)字形：这类码位（U+E000–U+F8FF 及补充私用区）只有
+    // data/local/zigen.ttf 里有它的形状，必须套 .zigen（ZiGen 字体）才画得出来，
+    // 否则浏览器只能画出豆腐块。没有字体文件时 @font-face 加载失败会回落到 serif，
+    // 效果与改动前一致 —— 所以这是本地可选增强，不影响公开克隆。
+    const isPUA = (s) => {
+      const c = s.codePointAt(0);
+      return (c >= 0xe000 && c <= 0xf8ff) || (c >= 0xf0000 && c <= 0x10fffd);
+    };
     const mini = $("keys-mini");
     mini.innerHTML = "";
     for (const row of ROWS) {
@@ -101,7 +109,9 @@
             info.name +
             "</span></div>" +
             '<div class="rroots">' +
-            info.roots.map((r) => "<span>" + r + "</span>").join("") +
+            info.roots
+              .map((r) => (isPUA(r) ? '<span class="zigen">' + r + "</span>" : "<span>" + r + "</span>"))
+              .join("") +
             "</div>";
           cell.addEventListener("click", (e) => {
             e.stopPropagation();

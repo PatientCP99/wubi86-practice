@@ -395,6 +395,9 @@ body.beginner .text .ch .code {
   color: var(--fg);
 }
 .root .rroots span { white-space: nowrap; }
+/* 字根表里的私用区(PUA)字形：形状只存在于 data/local/zigen.ttf，必须套这个字体才画得出来；
+   没有字体文件时 @font-face 失败会回落到 serif（豆腐块），与改动前表现一致。 */
+.root .rroots .zigen { font-family: "ZiGen", serif; font-size: 17px; line-height: 1; }
 .root.lit { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--root-bg)); }
 .root.picked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .rootnote {
